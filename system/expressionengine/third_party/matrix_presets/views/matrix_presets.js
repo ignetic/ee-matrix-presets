@@ -20,15 +20,15 @@ $(document).ready(function(){
 				$.ajax({
 					url: AJAX_BASE + "get_presets",
 					type: "POST",
-					data: {'XID': EE.XID},
+					data: {'CSRF_TOKEN': EE.CSRF_TOKEN},
 					dataType: 'json', //json
 					success:function(data) {
 						if (data.presets) {
 							presets = data.presets;
 						}
 						initPresets(presets);
-						EE.XID = data.XID;
-						$('input[name=XID]').val(data.XID);
+						EE.CSRF_TOKEN = data.CSRF_TOKEN;
+						$('input[name=CSRF_TOKEN]').val(data.CSRF_TOKEN);
 					},
 					error:function(jqXHR, textStatus, errorMessage) {
 						alert(textStatus+': '+errorMessage);
