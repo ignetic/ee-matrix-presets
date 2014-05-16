@@ -66,7 +66,7 @@ class Matrix_presets_mcp {
 		{
 			$presets = unserialize($row['settings']);
 		}
-		ee()->output->send_ajax_response(array('presets' => $presets, 'XID' => ee()->functions->add_form_security_hash('{XID_HASH}')));
+		ee()->output->send_ajax_response(array('presets' => $presets, 'csrf_token' => '{csrf_token}'));
 	}	
 	
 	
@@ -110,7 +110,7 @@ class Matrix_presets_mcp {
 			}
 			ee()->db->where('module_name', 'Matrix_presets')->update('exp_modules', array('settings' => serialize($presets)));
 		}
-		ee()->output->send_ajax_response(array('presets' => $presets, 'XID' => ee()->functions->add_form_security_hash('{XID_HASH}')));
+		ee()->output->send_ajax_response(array('presets' => $presets, 'csrf_token' => '{csrf_token}'));
 	}
 	
 	
@@ -142,7 +142,7 @@ class Matrix_presets_mcp {
 				}
 			}
 		}
-		ee()->output->send_ajax_response(array('presets' => $presets, 'XID' => ee()->functions->add_form_security_hash('{XID_HASH}')));
+		ee()->output->send_ajax_response(array('presets' => $presets, 'csrf_token' => '{csrf_token}'));
 	}
 	
 }
