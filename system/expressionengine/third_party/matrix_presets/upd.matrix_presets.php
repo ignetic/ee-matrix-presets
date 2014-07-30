@@ -36,7 +36,7 @@ class Matrix_presets_upd {
 		$mod_data = array(
 			'module_name'			=> 'Matrix_presets',
 			'module_version'		=> $this->version,
-			'has_cp_backend'		=> "n",
+			'has_cp_backend'		=> "y",
 			'has_publish_fields'	=> 'n'
 		);
 		
