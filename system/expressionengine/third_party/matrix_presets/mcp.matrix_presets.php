@@ -39,14 +39,17 @@ class Matrix_presets_mcp {
 	 */
 	public function index()
 	{
-	
-	echo ee()->input->get('method');
-
 		// If this isn't an AJAX request, just display the "base" settings form.
 		if ( ! ee()->input->is_ajax_request())
 		{
-			ee()->cp->set_variable('cp_page_title', 
-									lang('matrix_presets_module_name'));
+			if ( version_compare( APP_VER, '2.6.0', '<' ) )
+			{
+				$this->EE->cp->set_variable( 'cp_page_title', lang('matrix_presets_module_name') );
+			}
+			else
+			{
+				$this->EE->view->cp_page_title = lang('matrix_presets_module_name');
+			}
 									
 			return "Nothing to see here...";
 		}
