@@ -9,18 +9,18 @@
  * @author		Simon Andersohn
  * @link		
  */
+ 
+require_once PATH_THIRD.'matrix_presets/config.php';
 
 class Matrix_presets_ext {
 
-	public $name           = 'Matrix Presets';
-	public $version        = '1.0';
+	public $name = MATRIX_PRESETS_NAME;
+	public $version = MATRIX_PRESETS_VERSION; 
+	
 	public $description    = 'Adds the ability to save and load matrix values';
 	public $settings_exist = 'n';
 	public $docs_url       = '';
-	
-	public $_base_url;
-	public $_ajax_url;
-	public $_ajax_xid;
+
 
 	/**
 	 * Class Constructor
@@ -28,6 +28,8 @@ class Matrix_presets_ext {
 	public function __construct($settings = array())
 	{
 	
+		$this->EE =& get_instance();
+		
 		// --------------------------------------------
 		//  Settings!
 		// --------------------------------------------
@@ -56,7 +58,7 @@ class Matrix_presets_ext {
 
 		foreach($hooks as $hook)
 		{
-			ee()->db->insert('extensions', array(
+			$this->EE->db->insert('extensions', array(
 				'class'    => get_class($this),
 				'method'   => $hook,
 				'hook'     => $hook,
@@ -86,7 +88,7 @@ class Matrix_presets_ext {
 		//  Delete the extension hooks
 		// -------------------------------------------
 
-		ee()->db->where('class', get_class($this))
+		$this->EE->db->where('class', get_class($this))
 		             ->delete('exp_extensions');
 	}
 
@@ -101,14 +103,14 @@ class Matrix_presets_ext {
 	
 		$output = '';
 	
-		if (ee()->extensions->last_call !== FALSE)
+		if ($this->EE->extensions->last_call !== FALSE)
 		{
-			$output = ee()->extensions->last_call;
+			$output = $this->EE->extensions->last_call;
 		}
 	
 		$vars = array();
 		
-		$output .= ee()->load->view('matrix_presets.js', $vars, TRUE);
+		$output .= $this->EE->load->view('matrix_presets.js', $vars, TRUE);
 
 		return $output;
 

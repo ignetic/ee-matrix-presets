@@ -1,17 +1,11 @@
 <?php
 
-/**
- * ExpressionEngine Matrix Presets
- *
- * @package		Matrix Presets
- * @subpackage	Addons
- * @category	Module
- * @author		Simon Andersohn
- * @link		
- */
- 
-$config['name'] = 'Matrix Presets';
-$config['version'] = '1.1';
+if (! defined('MATRIX_PRESETS_VERSION'))
+{
+	define('MATRIX_PRESETS_NAME', 'Matrix Presets');
+	define('MATRIX_PRESETS_VERSION',  '1.2');
+}
 
-/* End of file mod.matrix_presets.php */
-/* Location: ./system/expressionengine/third_party/matrix_presets/config.php */
+$config['name']    = MATRIX_PRESETS_NAME;
+$config['version'] = MATRIX_PRESETS_VERSION; 
+ 
