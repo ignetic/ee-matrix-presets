@@ -102,7 +102,7 @@ class Matrix_presets_mcp {
 				$presets[$row['field_id']][$row['preset_id']] = unserialize($row['preset_values']);
 			}
 		}
-		else
+		elseif ($this->EE->db->field_exists('settings', 'modules'))
 		{
 				// Try old settings
 				$query = $this->EE->db->select('settings')->where('module_name', $this->class)->get('modules');

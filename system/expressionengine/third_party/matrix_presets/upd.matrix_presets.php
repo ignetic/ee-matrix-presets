@@ -122,50 +122,51 @@ class Matrix_presets_upd {
 			// Move old settings to new table
 			$presets = array();
 			
-			// Get settings from old table
-			$query = $this->EE->db->select('settings')->where('module_name', $this->class)->get('modules');
-			foreach ($query->result_array() as $row)
+			if ($this->EE->db->field_exists('settings', 'modules'))
 			{
-				$presets = unserialize($row['settings']);
-			}
 			
-			if (!empty($presets))
-			{
-				// add to new table
-				foreach($presets as $field_id => $val)
+				// Get settings from old table
+				$query = $this->EE->db->select('settings')->where('module_name', $this->class)->get('modules');
+				foreach ($query->result_array() as $row)
 				{
-					$fields = array();
-					$fields['site_id'] = $this->site_id;
-					$fields['field_id'] = $field_id;
-					$fields['serialized'] = 1;
-					
-					foreach($val as $preset_id => $preset_values)
+					$presets = unserialize($row['settings']);
+				}
+				
+				if (!empty($presets))
+				{
+					// add to new table
+					foreach($presets as $field_id => $val)
 					{
-						// Let's start the preset ids from 1
-						$fields['preset_id'] = $preset_id+1;
-					
-						$this->EE->db->from($this->settings_table);
-						$this->EE->db->where($fields);
-						if ($this->EE->db->count_all_results() == 0) 
-						{
-							$fields['preset_values'] = serialize($preset_values);
-							$query = $this->EE->db->insert($this->settings_table, $fields);
-						}
-						else
-						{
-							$query = $this->EE->db->update($this->settings_table, array('preset_values' => serialize($preset_values)), $fields);
-						}
+						$fields = array();
+						$fields['site_id'] = $this->site_id;
+						$fields['field_id'] = $field_id;
+						$fields['serialized'] = 1;
 						
+						foreach($val as $preset_id => $preset_values)
+						{
+							// Let's start the preset ids from 1
+							$fields['preset_id'] = $preset_id+1;
+						
+							$this->EE->db->from($this->settings_table);
+							$this->EE->db->where($fields);
+							if ($this->EE->db->count_all_results() == 0) 
+							{
+								$fields['preset_values'] = serialize($preset_values);
+								$query = $this->EE->db->insert($this->settings_table, $fields);
+							}
+							else
+							{
+								$query = $this->EE->db->update($this->settings_table, array('preset_values' => serialize($preset_values)), $fields);
+							}
+							
+						}
 					}
+				
+					// Remove settings from old table
+					$this->EE->db->update('modules', array('settings' => NULL), array('module_name' => $this->class));
+					
 				}
 			
-				// Remove settings from old table
-				if ($this->EE->db->field_exists('settings', 'modules'))
-				{
-					$this->EE->db->update('modules', array('settings' => NULL), array('module_name' => $this->class));
-				}
-				
-				
 			}
 			
 			
