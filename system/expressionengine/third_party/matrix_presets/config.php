@@ -3,7 +3,7 @@
 if (! defined('MATRIX_PRESETS_VERSION'))
 {
 	define('MATRIX_PRESETS_NAME', 'Matrix Presets');
-	define('MATRIX_PRESETS_VERSION',  '1.3');
+	define('MATRIX_PRESETS_VERSION',  '1.3.2');
 }
 
 $config['name']    = MATRIX_PRESETS_NAME;

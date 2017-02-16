@@ -1,0 +1,30 @@
+Changelog for Matrix Presets
+===============================
+
+## 1.3.2
+-- Added module access privileges
+-- Added support for MX Select Plus field type
+
+
+## 1.3
+-- Fixed issue where previously used settings column within modules table was still being searched
+
+
+## 1.2
+
+- Fixed issues with CSRF when secure forms mode is enabled 
+- Additional field support for Radio, Files, PT Switch, and an attempt with Assets
+- Created separate table and moved settings from within module table
+- Made backward compatible to EE 2.5
+- Various fixes
+
+## 1.1
+
+- Added missing settings column to install
+
+## 1.0
+
+- Release version
+
+
+

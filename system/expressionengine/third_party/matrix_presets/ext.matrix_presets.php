@@ -108,10 +108,35 @@ class Matrix_presets_ext {
 			$output = $this->EE->extensions->last_call;
 		}
 	
-		$vars = array();
+		$group_id = $this->EE->session->userdata['group_id'];
+		$allowed_group = FALSE;
 		
-		$output .= $this->EE->load->view('matrix_presets.js', $vars, TRUE);
-
+		if ($group_id == 1)
+		{
+			$allowed_group = TRUE;
+		}
+		else
+		{
+			$query = $this->EE->db->query('
+						SELECT m.module_name
+							FROM exp_modules m, exp_module_member_groups mmg
+						WHERE m.module_id = mmg.module_id
+							AND m.module_name = "Matrix_presets"
+							AND mmg.group_id = ' . $group_id . '
+							AND m.has_cp_backend = "y"
+					');
+			if ($query->num_rows()) {
+				$allowed_group = TRUE;
+			}
+		}
+		
+		if ($allowed_group === TRUE)
+		{
+			
+			$output .= $this->EE->load->view('matrix_presets.js', array(), TRUE);
+			
+		}
+	
 		return $output;
 
 	}

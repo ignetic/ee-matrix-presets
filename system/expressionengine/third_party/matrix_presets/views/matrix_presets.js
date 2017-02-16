@@ -50,7 +50,7 @@ $(document).ready(function(){
 						$('input[name='+CSRF_TOKEN_NAME+']').val(data.CSRF_TOKEN);
 					},
 					error:function(jqXHR, textStatus, errorMessage) {
-						alert(textStatus+': '+errorMessage);
+						console.log('Matrix Presets - '+textStatus+': '+errorMessage);
 					} 
 				});
 				
@@ -129,10 +129,13 @@ $(document).ready(function(){
 								
 								for (i in value[icol]) {
 									if (fieldValue = value[icol][i]) {
+
 										var $cloneField = $(this).closest('td.matrix').find('ul.pt-list li:last');
-										$cloneField.find('input').val(value[icol][i]);
+										
 										if (i != value[icol].length-1)
 											$cloneField.clone().insertAfter($cloneField);
+										
+										$cloneField.find('input').val(value[icol][i]);
 									}
 								}
 								
@@ -217,7 +220,14 @@ $(document).ready(function(){
 									$(this).find('ul.pt-switch li:contains("'+$(this).find('option:selected').text()+'")').click();
 								}
 								
-							}						
+							}
+
+							// MX Select Plus
+							if ($(this).find('.chzn-container').length > 0) {
+								if(jQuery().trigger) {
+									$(this).find('select').trigger('liszt:updated').trigger("chosen:updated");
+								}
+							}					
 
 							// Assets
 							if ($(this).hasClass('assets') && typeof Assets.actions !== 'undefined') {
