@@ -1,7 +1,7 @@
 Matrix Presets
 =================
 
-For ExpressionEngine 2
+For ExpressionEngine
 
 Adds the ability to save and load matrix values within P&amp;T Matrix. Useful for duplicating or pre-populating Matrix content.
 
