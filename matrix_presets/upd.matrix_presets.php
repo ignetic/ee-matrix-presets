@@ -27,7 +27,7 @@ class Matrix_presets_upd {
 	 */
 	public function __construct()
 	{
-		$this->EE =& get_instance();
+		$this->EE = get_instance();
 		
 		$this->site_id = $this->EE->config->item('site_id');
 		

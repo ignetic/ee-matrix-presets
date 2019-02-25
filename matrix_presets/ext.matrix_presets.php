@@ -28,7 +28,7 @@ class Matrix_presets_ext {
 	public function __construct($settings = array())
 	{
 	
-		$this->EE =& get_instance();
+		$this->EE = get_instance();
 		
 		// --------------------------------------------
 		//  Settings!
@@ -70,6 +70,11 @@ class Matrix_presets_ext {
 		}
 	}
 
+	public function settings()
+	{
+		return array();
+	}
+
 	/**
 	 * Update Extension
 	 */
@@ -108,34 +113,14 @@ class Matrix_presets_ext {
 			$output = $this->EE->extensions->last_call;
 		}
 	
-		$group_id = $this->EE->session->userdata['group_id'];
-		$allowed_group = FALSE;
+		$vars['base'] = '';
 		
-		if ($group_id == 1)
+		if ( version_compare( APP_VER, '3', '>=' ) )
 		{
-			$allowed_group = TRUE;
-		}
-		else
-		{
-			$query = $this->EE->db->query('
-						SELECT m.module_name
-							FROM exp_modules m, exp_module_member_groups mmg
-						WHERE m.module_id = mmg.module_id
-							AND m.module_name = "Matrix_presets"
-							AND mmg.group_id = ' . $group_id . '
-							AND m.has_cp_backend = "y"
-					');
-			if ($query->num_rows()) {
-				$allowed_group = TRUE;
-			}
+			$vars['base'] = ee('CP/URL')->make('cp/addons/settings/matrix_presets', array(), '', '') . '/'; 
 		}
 		
-		if ($allowed_group === TRUE)
-		{
-			
-			$output .= $this->EE->load->view('matrix_presets.js', array(), TRUE);
-			
-		}
+		$output .= $this->EE->load->view('matrix_presets.js', $vars, TRUE);
 	
 		return $output;
 

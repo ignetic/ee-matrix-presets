@@ -4,12 +4,19 @@ $(document).ready(function(){
 	var presets = {};
 	
 	// Matrix fields as well as Henshu support
-	var matrixFields = $('#publishForm .publish_field.publish_matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix")');
+	var matrixFields = $('#publishForm .publish_field.publish_matrix div.matrix, .publish .setting-field > div.matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix") div.matrix');
 	
 	// !! For some reason this is loaded before EE variable is ready and then again later when it is
 	if (typeof EE !== 'undefined') {
 		
-		var AJAX_BASE = EE.BASE + "&C=addons_modules&M=show_module_cp&module=matrix_presets&method=";
+		var AJAX_BASE = '<?php echo $base; ?>';
+		EE.SESSION = '';
+		
+		if (AJAX_BASE == '') {
+			AJAX_BASE = EE.BASE + "&C=addons_modules&M=show_module_cp&module=matrix_presets&method=";
+		} else {
+			EE.SESSION = EE.BASE.match(/(S=[\w\d]+)/)[0];
+		}
 		
 		// Pre EE 2.8 support
 		var CSRF_TOKEN_NAME = 'CSRF_TOKEN';
@@ -20,12 +27,15 @@ $(document).ready(function(){
 		}
 		
 		// Get matrix field ids
+		var fieldId;
 		var fieldIds = new Array();
 		matrixFields.each(function() {
-			var fieldId = $(this).find('div.matrix:first').attr('id').replace('field_id_','');
-			fieldIds.push(parseInt(fieldId));
+			if ($(this).attr('id')) {
+				fieldId = $(this).attr('id').replace('field_id_','');
+				fieldIds.push(parseInt(fieldId));
+			}
 		});
-				
+
 		// Need to wait after `document.ready` has finished executing!
 		setTimeout(function() {
 			
@@ -37,7 +47,7 @@ $(document).ready(function(){
 				postData[CSRF_TOKEN_NAME] = EE.CSRF_TOKEN;
 				
 				$.ajax({
-					url: AJAX_BASE + "get_presets",
+					url: AJAX_BASE + "get_presets&" + EE.SESSION,
 					type: "POST",
 					data: postData,
 					dataType: 'json', //json
@@ -61,20 +71,20 @@ $(document).ready(function(){
 	// start the process
 	function initPresets(presets) {
 
-		// Matrix fields as well as Henshu support
-		var matrixFields = $('#publishForm .publish_field.publish_matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix")');
-		
 		matrixFields.each(function() {
 			
 			//var fieldId = $(this).attr('id').replace('hold_field_','');
-			var fieldId = $(this).find('div.matrix:first').attr('id').replace('field_id_','');
+			var fieldId;
+			if ($(this).attr('id')) {
+				fieldId = $(this).attr('id').replace('field_id_','');
+			}
 
 			if ( ! fieldId)
 				return true;
 			
-			var buttonsHTML = '<div style="float:right; margin-top:-12px;" class="matrix-presets" data-field-id="' + fieldId + '"><select class="matrix-preset-select"><option value="">- Select A Preset -</option></select> <input type="button" name="matrix-preset-load" class="matrix-preset-load" value="Load"> <input type="button" name="matrix-preset-delete" class="matrix-preset-delete" value="Delete"> <input type="button" name="matrix-preset-save" class="matrix-preset-save" value="Save"></div>';
+			var buttonsHTML = '<div style="float:right; margin-top:-12px;" class="matrix-presets" data-field-id="' + fieldId + '"><select class="matrix-preset-select"><option value="">- Select A Preset -</option></select> <input type="button" name="matrix-preset-load" class="matrix-preset-load btn" value="Load"> <input type="button" name="matrix-preset-delete" class="matrix-preset-delete btn remove" value="Delete"> <input type="button" name="matrix-preset-save" class="matrix-preset-save btn action" value="Save"></div>';
 			
-			var presetButtons = $(buttonsHTML).appendTo($(this).find('div.matrix'));
+			var presetButtons = $(buttonsHTML).appendTo($(this));
 			
 			updateSelects(presets, fieldId);
 			
@@ -82,20 +92,18 @@ $(document).ready(function(){
 		
 		
 		// Load preset button
-		matrixFields.find('div.matrix .matrix-preset-load').on('click', function() {
+		matrixFields.find('.matrix-preset-load').on('click', this, function() {
 
+			var $field = $(this).closest('div.matrix');
 			var fieldId = $(this).closest('.matrix-presets').data('field-id');
-			var presetId = $(this).parent().find('.matrix-preset-select').val();
+			var presetId = $field.find('.matrix-preset-select').val();
 
 			if (fieldId && presetId != "") {
-				
-				//var answer = confirm("Are you sure you want to load this preset?");
-				
-				//if (!answer)
+
+				var $rows = $field.find('tbody tr:not(.matrix-norows):visible');
+				//if (!$rows.length)
 				//	return false;
 
-				var field = $(this).closest('#sub_hold_field_' + fieldId);
-				
 				if (typeof presets[fieldId] == 'undefined') {
 					alert('Preset not found');
 					return false;
@@ -104,9 +112,9 @@ $(document).ready(function(){
 				var values = presets[fieldId][presetId].values;
 
 				// Only matrix visible fields
-				var numRows = field.find('tbody tr:not(.matrix-norows):visible').length;
+				var numRows = $rows.length;
 
-				var addEntryButton = $('#sub_hold_field_' + fieldId + ' > .holder > div.matrix > a.matrix-btn.matrix-add');
+				var addEntryButton = $field.find('> a.matrix-btn.matrix-add');
 
 				// Create one row for each value
 				for (var i in values)
@@ -115,15 +123,16 @@ $(document).ready(function(){
 				// Wait for field to finish initializing...
 				setTimeout(function() {
 					// Skip the placeholder row for "No rows have been added yet..."
-					field.find('tbody tr:not(.matrix-norows):visible').filter(':eq('+ numRows + '), :gt(' + numRows + ')').each(function(irow) {
+					$field.find('tbody tr:not(.matrix-norows):visible').filter(':eq('+ numRows + '), :gt(' + numRows + ')').each(function(irow) {
 						
+						var $row = $(this);
 						var value = values[irow];
 						
 						$(this).find('> td.matrix').each(function(icol) {
 						
 							var $cell = $(this);
 							var fieldValue = '';
-
+							
 							// PT List
 							if ($(this).find('ul.pt-list').length > 0) {
 								
@@ -300,9 +309,9 @@ $(document).ready(function(){
 		
 		
 		// Save preset button
-		matrixFields.find('div.matrix .matrix-preset-save').on('click', function() {
+		matrixFields.find('.matrix-preset-save').on('click', function() {
 		
-			var field = $(this).closest('div.matrix');
+			var $field = $(this).closest('div.matrix');
 			var fieldId = $(this).closest('.matrix-presets').data('field-id');
 			//var groupId = EE.publish.field_group;
 
@@ -310,11 +319,12 @@ $(document).ready(function(){
 				return false;
 			
 			// if no rows exist, do nothing
-			if (!field.find('tbody tr:not(.matrix-norows):visible').length)
+			var $rows = $field.find('tbody tr:not(.matrix-norows):visible');
+			if (!$rows)
 				return false;
 			
-			var presetId = $(this).parent().find('.matrix-preset-select').val();
-			var presetName = $(this).parent().find('.matrix-preset-select option:selected').text();
+			var presetId = $field.find('.matrix-preset-select').val();
+			var presetName = $field.find('.matrix-preset-select option:selected').text();
 			
 			// Is this a new preset?
 			var newPreset = false;
@@ -328,14 +338,14 @@ $(document).ready(function(){
 					return false;
 			} else {
 			
-				var answer = confirm("Overwrite this preset?");
+				var answer = confirm("Overwrite this preset?\n'"+presetName+"'");
 				
 				if (!answer)
 					return false;
 			}
 
 			// Get the row data and save
-			var numRows = field.find('tbody tr:not(.matrix-norows):visible').length;
+			var numRows = $rows.length;
 			
 			// simpler to use objects when sending to PHP
 			var presetValues = {}
@@ -345,7 +355,7 @@ $(document).ready(function(){
 			var fieldRow = {};
 			
 			// search all field types (more to add)
-			field.find('tbody tr:not(.matrix-norows):visible').each(function(irow) {
+			$rows.each(function(irow) {
 				fieldRow[irow] = {};
 				$(this).find('td.matrix').each(function(icol) {
 					fieldRow[irow][icol] = {};
@@ -360,7 +370,7 @@ $(document).ready(function(){
 			postData[CSRF_TOKEN_NAME] = EE.CSRF_TOKEN;
 			
 			$.ajax({
-				url: AJAX_BASE + "save_preset",
+				url: AJAX_BASE + "save_preset&" + EE.SESSION,
 				type: "POST",
 				data: postData,
 				dataType: 'json', //json
@@ -379,18 +389,19 @@ $(document).ready(function(){
 		});
 
 		// Delete preset button
-		matrixFields.find('div.matrix .matrix-preset-delete').on('click', function() {
+		matrixFields.find('.matrix-preset-delete').on('click', this, function() {
 		
-			var field = $(this).closest('div.matrix');
+			var $field = $(this).closest('div.matrix');
 			var fieldId = $(this).closest('.matrix-presets').data('field-id');
 			//var groupId = EE.publish.field_group;
 
-			var presetId = $(this).parent().find('.matrix-preset-select').val();
+			var presetId = $field.find('.matrix-preset-select').val();
+			var presetName = $field.find('.matrix-preset-select option:selected').text();
 			
 			if (!fieldId || !presetId)
 				return false;
 				
-			var answer = confirm("Are you sure you want to delete this preset?");
+			var answer = confirm("Are you sure you want to delete this preset? \n'"+presetName+"'");
 			
 			if (!answer)
 				return false;
@@ -399,7 +410,7 @@ $(document).ready(function(){
 			postData[CSRF_TOKEN_NAME] = EE.CSRF_TOKEN;
 			
 			$.ajax({
-				url: AJAX_BASE + "delete_preset",
+				url: AJAX_BASE + "delete_preset&" + EE.SESSION,
 				type: "POST",
 				data: postData,
 				dataType: 'json',

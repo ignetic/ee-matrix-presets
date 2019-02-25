@@ -32,18 +32,18 @@ class Matrix_presets_mcp {
 	public function __construct()
 	{
 		// pre EE 2.6.0 compatibility
-		$this->EE =& get_instance();
+		$this->EE = get_instance();
 		
 		$this->site_id = $this->EE->config->item('site_id');
 		
-		if ( version_compare( APP_VER, '2.8.0', '<' ) )
+		if(defined('CSRF_TOKEN'))
 		{
-			$this->csrf_token = '{XID_HASH}';
+			$this->csrf_token = CSRF_TOKEN;
 		}
 		else
 		{
-			$this->csrf_token = '{CSRF_TOKEN}';
-		}
+			$this->csrf_token = ee()->security->restore_xid();
+		} 
 		
 	}
 	
@@ -114,7 +114,7 @@ class Matrix_presets_mcp {
 		
 		if ($ajax === TRUE)
 		{
-			$this->EE->output->send_ajax_response(array('presets' => $presets, 'CSRF_TOKEN' => $this->EE->functions->add_form_security_hash($this->csrf_token)));
+			$this->EE->output->send_ajax_response(array('presets' => $presets, 'CSRF_TOKEN' => $this->csrf_token));
 		}
 		else
 		{
@@ -186,7 +186,7 @@ class Matrix_presets_mcp {
 			
 		}
 		
-		$this->EE->output->send_ajax_response(array('presets' => $this->get_presets($field_ids, TRUE), 'CSRF_TOKEN' => $this->EE->functions->add_form_security_hash($this->csrf_token)));
+		$this->EE->output->send_ajax_response(array('presets' => $this->get_presets($field_ids, TRUE), 'CSRF_TOKEN' => $this->csrf_token));
 		
 	}
 	
@@ -216,7 +216,7 @@ class Matrix_presets_mcp {
 			
 		}
 		
-		$this->EE->output->send_ajax_response(array('presets' => $this->get_presets($field_ids, TRUE), 'CSRF_TOKEN' => $this->EE->functions->add_form_security_hash($this->csrf_token)));
+		$this->EE->output->send_ajax_response(array('presets' => $this->get_presets($field_ids, TRUE), 'CSRF_TOKEN' => $this->csrf_token));
 	}
 	
 }
