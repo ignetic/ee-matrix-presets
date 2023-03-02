@@ -2,6 +2,10 @@ Changelog for Matrix Presets
 ===============================
 
 
+## 1.3.4
+-- ExpressionEngine 6 compatibility
+
+
 ## 1.3.3
 -- ExpressionEngine 3 compatibility
 

@@ -1,10 +1,15 @@
+
+/************************************
+/* Matrix Presets - matrix_presets.js
+/************************************/
+
 $(document).ready(function(){
 
 	// Saved Presets
 	var presets = {};
 	
 	// Matrix fields as well as Henshu support
-	var matrixFields = $('#publishForm .publish_field.publish_matrix div.matrix, .publish .setting-field > div.matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix") div.matrix');
+	var matrixFields = $('.form-standard fieldset .field-control div.matrix, #publishForm .publish_field.publish_matrix div.matrix, .publish .setting-field > div.matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix") div.matrix');
 	
 	// !! For some reason this is loaded before EE variable is ready and then again later when it is
 	if (typeof EE !== 'undefined') {
@@ -17,7 +22,7 @@ $(document).ready(function(){
 		} else {
 			EE.SESSION = EE.BASE.match(/(S=[\w\d]+)/)[0];
 		}
-		
+
 		// Pre EE 2.8 support
 		var CSRF_TOKEN_NAME = 'CSRF_TOKEN';
 		
@@ -82,7 +87,7 @@ $(document).ready(function(){
 			if ( ! fieldId)
 				return true;
 			
-			var buttonsHTML = '<div style="float:right; margin-top:-12px;" class="matrix-presets" data-field-id="' + fieldId + '"><select class="matrix-preset-select"><option value="">- Select A Preset -</option></select> <input type="button" name="matrix-preset-load" class="matrix-preset-load btn" value="Load"> <input type="button" name="matrix-preset-delete" class="matrix-preset-delete btn remove" value="Delete"> <input type="button" name="matrix-preset-save" class="matrix-preset-save btn action" value="Save"></div>';
+			var buttonsHTML = '<div style="float:right; margin-top:-12px;" class="matrix-presets" data-field-id="' + fieldId + '"><select class="matrix-preset-select" style="padding:3px 15px!important; margin-top:5px;"><option value="">- Select A Preset -</option></select> <input type="button" name="matrix-preset-load" class="matrix-preset-load btn button--small" value="Load" style="padding:5px 15px!important; margin-top:5px;"> <input type="button" name="matrix-preset-delete" class="matrix-preset-delete btn remove button--small" value="Delete" style="padding:5px 15px!important; margin-top:5px;"> <input type="button" name="matrix-preset-save" class="matrix-preset-save btn action button--small" value="Save" style="padding:5px 15px!important; margin-top:5px;"></div>';
 			
 			var presetButtons = $(buttonsHTML).appendTo($(this));
 			
@@ -133,8 +138,28 @@ $(document).ready(function(){
 							var $cell = $(this);
 							var fieldValue = '';
 							
+							// Wygwam
+							if ($(this).find('.wygwam-textarea').length > 0) {
+								
+							$(this).find('textarea').each(function(ifield) {
+								if (typeof value[icol] !== "undefined" && typeof value[icol][ifield] !== "undefined") {
+									//refreshWygwam();
+									var fieldValue = value[icol][ifield];
+									$(this).val(fieldValue);
+									if (typeof Wygwam !== "undefined") {
+										var field_id = $(this).attr('id');
+										var config_handle = $('#'+field_id).data('config');
+										var defer = $('#'+field_id).data('defer');
+
+										if(defer === 'n') defer = false;
+
+										new Wygwam(field_id, config_handle, defer);
+									}
+								}
+							});
+								
 							// PT List
-							if ($(this).find('ul.pt-list').length > 0) {
+							} else if ($(this).find('ul.pt-list').length > 0) {
 								
 								for (i in value[icol]) {
 									if (fieldValue = value[icol][i]) {
@@ -191,7 +216,7 @@ $(document).ready(function(){
 
 								$(this).find('input, textarea, select, radio').each(function(ifield) {
 
-									if (typeof value[icol][ifield] !== "undefined") {
+									if (typeof value[icol] !== "undefined" && typeof value[icol][ifield] !== "undefined") {
 										
 										var fieldValue = value[icol][ifield];
 

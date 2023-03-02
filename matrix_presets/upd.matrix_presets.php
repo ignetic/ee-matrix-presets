@@ -85,8 +85,14 @@ class Matrix_presets_upd {
 									'module_name'	=> $this->class
 								))->row('module_id');
 		
-		$this->EE->db->where('module_id', $mod_id)
-					->delete('module_member_groups');
+		if ($this->EE->db->table_exists('module_member_groups'))
+		{
+			$this->EE->db->where('module_id', $mod_id)->delete('module_member_groups');
+		}	
+		if ($this->EE->db->table_exists('module_member_roles')) 
+		{
+			$this->EE->db->where('module_id', $mod_id)->delete('module_member_roles');
+		}
 		
 		$this->EE->db->where('module_name', $this->class)
 					->delete('modules');

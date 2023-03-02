@@ -113,7 +113,7 @@ class Matrix_presets_ext {
 			$output = $this->EE->extensions->last_call;
 		}
 	
-		$vars['base'] = '';
+		$vars['base'] = '';		
 		
 		if ( version_compare( APP_VER, '3', '>=' ) )
 		{
