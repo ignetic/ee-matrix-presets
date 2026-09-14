@@ -72,11 +72,15 @@ $(function() {
 		});
 	}
 
-	// The field's own rows (not the "no rows" row, or rows of tables inside cells such as Playa's)
+	// The field's own rows (not the "no rows" row, or rows of tables inside cells such as Playa's).
+	// Matrix hides deleted rows rather than removing them (until the entry is saved), so skip those.
 	function getRows($field) {
 		return $field.children('table').first()
 			.children('tbody').children('tr')
-			.not('.matrix-norows');
+			.not('.matrix-norows')
+			.filter(function() {
+				return this.style.display !== 'none';
+			});
 	}
 
 	// Matrix's own object for the field (Matrix only sets up a field's rows once it's visible)
