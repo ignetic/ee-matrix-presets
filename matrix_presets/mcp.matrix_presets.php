@@ -99,7 +99,13 @@ class Matrix_presets_mcp {
 		{
 			foreach ($query->result_array() as $row)
 			{
-				$presets[$row['field_id']][$row['preset_id']] = unserialize($row['preset_values']);
+				$preset_values = $this->unserialize_values($row['preset_values']);
+
+				// Skip corrupt/truncated presets
+				if ($preset_values !== FALSE)
+				{
+					$presets[$row['field_id']][$row['preset_id']] = $preset_values;
+				}
 			}
 		}
 		elseif ($this->EE->db->field_exists('settings', 'modules'))
@@ -108,8 +114,9 @@ class Matrix_presets_mcp {
 				$query = $this->EE->db->select('settings')->where('module_name', $this->class)->get('modules');
 				foreach ($query->result_array() as $row)
 				{
-					if ($row['settings']) {
-						$presets = unserialize($row['settings']);
+					$settings = $this->unserialize_values($row['settings']);
+					if ($settings !== FALSE) {
+						$presets = $settings;
 					}
 				}
 		}
@@ -156,7 +163,8 @@ class Matrix_presets_mcp {
 	
 					// is this a new preset?... get highest key
 					if ($newpreset == 'true' && $preset_id == 0){
-						$query = $this->EE->db->select_max('preset_id')->from($this->settings_table)->where($fields)->get();
+						// preset_id is a varchar, so cast for a numeric max (as text, '9' sorts after '10')
+						$query = $this->EE->db->select('MAX(CAST(preset_id AS UNSIGNED)) AS preset_id', FALSE)->from($this->settings_table)->where($fields)->get();
 						if ($query->num_rows() > 0)
 						{
 							foreach ($query->result_array() as $row)
@@ -220,7 +228,28 @@ class Matrix_presets_mcp {
 		
 		$this->EE->output->send_ajax_response(array('presets' => $this->get_presets($field_ids, TRUE), 'CSRF_TOKEN' => $this->csrf_token));
 	}
-	
+
+
+	/**
+	 * Unserialize stored preset data (arrays only, never objects)
+	 *
+	 * @return array|bool FALSE if empty or invalid
+	 */
+	private function unserialize_values($data)
+	{
+		if ( ! $data)
+		{
+			return FALSE;
+		}
+
+		// The allowed_classes option needs PHP 7 (EE3 can run on PHP 5)
+		$values = (PHP_VERSION_ID >= 70000)
+			? @unserialize($data, array('allowed_classes' => false))
+			: @unserialize($data);
+
+		return is_array($values) ? $values : FALSE;
+	}
+
 }
 /* End of file mcp.matrix_presets.php */
 /* Location: /system/expressionengine/third_party/matrix_presets/mcp.matrix_presets.php */

@@ -135,9 +135,20 @@ class Matrix_presets_upd {
 				$query = $this->EE->db->select('settings')->where('module_name', $this->class)->get('modules');
 				foreach ($query->result_array() as $row)
 				{
-					$presets = unserialize($row['settings']);
+					if ($row['settings'])
+					{
+						// Arrays only, never objects (the allowed_classes option needs PHP 7)
+						$presets = (PHP_VERSION_ID >= 70000)
+							? @unserialize($row['settings'], array('allowed_classes' => false))
+							: @unserialize($row['settings']);
+					}
 				}
-				
+
+				if ( ! is_array($presets))
+				{
+					$presets = array();
+				}
+
 				if (!empty($presets))
 				{
 					// add to new table
