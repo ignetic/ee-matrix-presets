@@ -20,7 +20,10 @@ $(document).ready(function(){
 		if (AJAX_BASE == '') {
 			AJAX_BASE = EE.BASE + "&C=addons_modules&M=show_module_cp&module=matrix_presets&method=";
 		} else {
-			EE.SESSION = EE.BASE.match(/(S=[\w\d]+)/)[0];
+			var session = EE.BASE.match(/(S=[\w\d]+)/);
+			if (session) {
+				EE.SESSION = EE.BASE.match(/(S=[\w\d]+)/)[0];
+			}
 		}
 
 		// Pre EE 2.8 support

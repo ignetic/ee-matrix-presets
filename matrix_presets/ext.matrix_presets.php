@@ -20,7 +20,9 @@ class Matrix_presets_ext {
 	public $description    = 'Adds the ability to save and load matrix values';
 	public $settings_exist = 'n';
 	public $docs_url       = '';
+	public $settings;
 
+	private $EE;
 
 	/**
 	 * Class Constructor

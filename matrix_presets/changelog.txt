@@ -2,6 +2,13 @@ Changelog for Matrix Presets
 ===============================
 
 
+## 1.3.6
+-- Fixed JS error when control panel URL has no session ID (cookie-only sessions)
+-- PHP 8.2 fix: declared extension properties to avoid dynamic property deprecation
+
+## 1.3.5
+-- PHP 8.1 fix
+
 ## 1.3.4
 -- ExpressionEngine 6 compatibility
 
