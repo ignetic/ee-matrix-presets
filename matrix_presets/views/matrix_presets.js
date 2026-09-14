@@ -9,8 +9,9 @@ $(document).ready(function(){
 	var presets = {};
 
 	// Preset format 2: values keyed by column ID, checkboxes/radios store their checked state.
+	// Format 3: disabled inputs aren't stored (e.g. Playa's unselected options).
 	// Older presets are keyed by column position and store every checkbox/radio value.
-	var PRESET_FORMAT = 2;
+	var PRESET_FORMAT = 3;
 
 	// Matrix fields as well as Henshu support
 	var matrixFields = $('.form-standard fieldset .field-control div.matrix, #publishForm .publish_field.publish_matrix div.matrix, .publish .setting-field > div.matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix") div.matrix');
@@ -114,7 +115,7 @@ $(document).ready(function(){
 
 			if (fieldId && presetId != "") {
 
-				var $rows = $field.find('tbody tr:not(.matrix-norows):visible');
+				var $rows = getMatrixRows($field);
 				//if (!$rows.length)
 				//	return false;
 
@@ -125,9 +126,15 @@ $(document).ready(function(){
 
 				var preset = presets[fieldId][presetId];
 				var values = preset.values || {};
+				var presetFormat = parseInt(preset.format, 10) || 1;
 
 				// Newer presets are keyed by column ID, older ones by column position
-				var keyedByColumn = (parseInt(preset.format, 10) >= PRESET_FORMAT);
+				var keyedByColumn = (presetFormat >= 2);
+
+				// Rows in order (presets saved by 1.3.7 can skip row numbers)
+				var rowKeys = $.map(values, function(value, key) {
+					return key;
+				});
 
 				// Only matrix visible fields
 				var numRows = $rows.length;
@@ -135,16 +142,16 @@ $(document).ready(function(){
 				var addEntryButton = $field.find('> a.matrix-btn.matrix-add');
 
 				// Create one row for each value
-				for (var i in values)
+				for (var i = 0; i < rowKeys.length; i++)
 					addEntryButton.click();
 
 				// Wait for field to finish initializing...
 				setTimeout(function() {
 					// Skip the placeholder row for "No rows have been added yet..."
-					$field.find('tbody tr:not(.matrix-norows):visible').slice(numRows).each(function(irow) {
+					getMatrixRows($field).slice(numRows).each(function(irow) {
 
 						var $row = $(this);
-						var value = values[irow];
+						var value = values[rowKeys[irow]];
 
 						if (typeof value !== 'object' || value === null)
 							return true;
@@ -233,13 +240,20 @@ $(document).ready(function(){
 									}
 								});
 
+							// Playa (drop panes): select the saved entries.
+							// Presets before format 3 also stored every unselected option, so leave those alone.
+							} else if ($(this).find('.playa-dp').length > 0) {
+								if (presetFormat >= 3) {
+									loadPlayaSelections($cell, cellValue);
+								}
+
 							// All Other Basic Fields
 							} else {
 
 								$(this).find('input, textarea, select').each(function(ifield) {
 
-									// file inputs can't be given a value (it throws)
-									if (typeof cellValue[ifield] !== "undefined" && this.type !== 'file') {
+									// file inputs can't be given a value (it throws); disabled inputs aren't saved
+									if (typeof cellValue[ifield] !== "undefined" && this.type !== 'file' && ! this.disabled) {
 
 										var $input = $(this);
 										var fieldValue = cellValue[ifield];
@@ -296,6 +310,12 @@ $(document).ready(function(){
 								}
 							}
 
+							// Matrix rich text (EE6+): the editor was created before the textarea was filled
+							var matrixCell = getMatrixCell(this);
+							if (matrixCell && matrixCell.type == 'rte') {
+								fillRte($cell, 0);
+							}
+
 							// EE's React dropdowns (e.g. single Channel Images Select) keep their own state
 							refreshDropdowns($cell);
 
@@ -334,7 +354,7 @@ $(document).ready(function(){
 				return false;
 
 			// if no rows exist, do nothing
-			var $rows = $field.find('tbody tr:not(.matrix-norows):visible');
+			var $rows = getMatrixRows($field);
 			if (!$rows.length)
 				return false;
 
@@ -372,12 +392,16 @@ $(document).ready(function(){
 			// search all field types (more to add)
 			$rows.each(function(irow) {
 				fieldRow[irow] = {};
-				$(this).find('td.matrix').each(function(icol) {
+				$(this).find('> td.matrix').each(function(icol) {
 					var colKey = getColKey($(this), icol);
 					fieldRow[irow][colKey] = {};
 					$(this).find('input, textarea, select').each(function(ifield) {
+						// disabled inputs aren't submitted (e.g. Playa's unselected options), so aren't stored
+						if (this.disabled) {
+							fieldRow[irow][colKey][ifield] = null;
+
 						// checkboxes and radios only store their value when checked
-						if ($(this).is('input:checkbox, input:radio')) {
+						} else if ($(this).is('input:checkbox, input:radio')) {
 							fieldRow[irow][colKey][ifield] = $(this).prop('checked') ? $(this).val() : null;
 						} else {
 							fieldRow[irow][colKey][ifield] = $(this).val();
@@ -467,6 +491,11 @@ $(document).ready(function(){
 			}
 
 		}
+	}
+
+	// The Matrix field's own rows (not rows of tables inside cells, such as Playa's drop panes)
+	function getMatrixRows($field) {
+		return $field.find('> table > tbody > tr:not(.matrix-norows):visible');
 	}
 
 	// Key for a cell's preset values: its Matrix column ID (from Matrix, or the input names
@@ -604,6 +633,56 @@ $(document).ready(function(){
 		});
 	}
 
+	// Put the (loaded) textarea content into the cell's rich text editor
+	function fillRte($cell, attempts) {
+		// Matrix's own input (editors can add textareas of their own)
+		var textarea = $cell.find('textarea[name]').get(0) || $cell.find('textarea').get(0);
+
+		if ( ! textarea)
+			return;
+
+		var html = textarea.value;
+
+		// RedactorX
+		if (window.RedactorX && RedactorX.dom) {
+			var redactorX = RedactorX.dom(textarea).dataget(RedactorX.namespace);
+
+			if (redactorX && redactorX.editor) {
+				redactorX.editor.setContent({html: html});
+				return;
+			}
+		}
+
+		// Redactor
+		if ($cell.find('.redactor-box').length && typeof $R !== 'undefined' && textarea.id) {
+			$R('#' + textarea.id, 'source.setCode', html);
+			return;
+		}
+
+		// CKEditor (created asynchronously)
+		var $editable = $cell.find('.ck-editor__editable');
+
+		if ($editable.length && $editable[0].ckeditorInstance) {
+			$editable[0].ckeditorInstance.setData(html);
+			return;
+		}
+
+		// Deferred editor: a preview until clicked (the editor is then created from the textarea)
+		var $preview = $cell.find('iframe.rte');
+
+		if ($preview.length && $preview[0].contentWindow) {
+			$preview[0].contentWindow.document.body.innerHTML = html;
+			return;
+		}
+
+		// Editor not ready yet
+		if (attempts < 50) {
+			setTimeout(function() {
+				fillRte($cell, attempts + 1);
+			}, 100);
+		}
+	}
+
 	// Re-render EE's React dropdowns with the loaded value selected (they don't read their hidden input back)
 	function refreshDropdowns($cell) {
 		if (typeof Dropdown === 'undefined' || typeof ReactDOM === 'undefined')
@@ -630,6 +709,74 @@ $(document).ready(function(){
 			ReactDOM.unmountComponentAtNode(this);
 			Dropdown.renderFields($(this).parent());
 		});
+	}
+
+	// Playa (drop panes): move the saved entries into the selections pane, in order,
+	// the same way Playa's own select button does
+	function loadPlayaSelections($cell, cellValue) {
+		var $playa = $cell.find('.playa-dp').first();
+		var $options = $playa.find('.playa-dp-options > div > ul');
+		var $caboose = $playa.find('.playa-dp-selections > div > ul > li.playa-dp-caboose');
+		var selected = 0;
+
+		if ( ! $caboose.length)
+			return;
+
+		$.each(cellValue, function(i, entryId) {
+			if ( ! entryId)
+				return true;
+
+			// the (unselected) option for this entry
+			var $item = $options.children('li.playa-entry').not('.playa-dp-placeholder, .playa-dp-selected').filter(function() {
+				return $(this).find('input').val() == entryId;
+			}).first();
+
+			if ( ! $item.length)
+				return true;
+
+			$item.removeClass('playa-dp-active').addClass('playa-dp-selected');
+
+			// hold the option's position with a placeholder
+			$('<li />').attr('id', $item.attr('id') + '-placeholder').addClass('playa-dp-placeholder').insertAfter($item);
+
+			// enable inputs
+			$item.find('*[name]').each(function() {
+				var name = $(this).attr('name').match(/^(.*)\[options\](.*)$/);
+				if (name) {
+					$(this).attr('name', name[1] + '[selections]' + name[2]);
+				}
+				$(this).removeAttr('disabled');
+			});
+
+			$item.insertBefore($caboose);
+			selected++;
+		});
+
+		if ( ! selected)
+			return;
+
+		// let Playa pick up the moved items
+		var instance = getPlayaInstance($playa[0]);
+		if (instance) {
+			instance.optionsSelect.updateItems();
+			instance.selectionsSelect.updateItems();
+		}
+
+		$playa.trigger('change');
+	}
+
+	function getPlayaInstance(el) {
+		if (typeof PlayaDropPanes === 'undefined' || ! PlayaDropPanes.instances)
+			return null;
+
+		for (var i = 0; i < PlayaDropPanes.instances.length; i++) {
+			var instance = PlayaDropPanes.instances[i];
+			if (instance.dom && instance.dom.$field && instance.dom.$field[0] === el && instance.optionsSelect && instance.selectionsSelect) {
+				return instance;
+			}
+		}
+
+		return null;
 	}
 
 	function hasDropdownItem(items, value) {

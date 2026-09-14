@@ -2,6 +2,11 @@ Changelog for Matrix Presets
 ===============================
 
 
+## 1.3.8
+-- Fixed Playa (drop panes) selections not loading; presets now only store selected entries (presets saved before 1.3.8 leave Playa unchanged)
+-- Fixed rows being miscounted when a cell contains its own table (e.g. Playa), which could load rows into the wrong place
+-- Fixed Matrix rich text (RTE) columns loading empty on EE6+ (the content is now set in the RedactorX/Redactor/CKEditor editor)
+
 ## 1.3.7
 -- Fixed new presets overwriting preset 10 once a field had 10 or more presets
 -- Fixed presets loading into the wrong columns after Matrix columns were added or reordered (new presets are saved by column ID; older presets still load by column position)
