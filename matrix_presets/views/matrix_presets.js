@@ -1,550 +1,113 @@
+$(function() {
 
-/************************************
-/* Matrix Presets - matrix_presets.js
-/************************************/
+	// Publish form only (this file is loaded on every CP page)
+	if (typeof EE === 'undefined' || ! EE.publish || window.MatrixPresets) {
+		return;
+	}
 
-$(document).ready(function(){
+	// Shared with other features (e.g. pasting rows)
+	window.MatrixPresets = {
+		loadRows: loadRows
+	};
 
-	// Saved Presets
-	var presets = {};
+	var URLS = <?php echo json_encode($urls); ?>;
 
-	// Preset format 2: values keyed by column ID, checkboxes/radios store their checked state.
-	// Format 3: disabled inputs aren't stored (e.g. Playa's unselected options).
-	// Older presets are keyed by column position and store every checkbox/radio value.
+	// How preset values are stored (the preset's "format"):
+	// none: keyed by column position, every checkbox/radio value (before 1.3.7)
+	// 2: keyed by column ID, checkboxes/radios store their checked state
+	// 3: disabled inputs aren't stored (e.g. Playa's unselected options)
 	var PRESET_FORMAT = 3;
 
-	// Matrix fields as well as Henshu support
-	var matrixFields = $('.form-standard fieldset .field-control div.matrix, #publishForm .publish_field.publish_matrix div.matrix, .publish .setting-field > div.matrix, .pageContents.group form.henshu .henshu_encapsulate:has("table.matrix") div.matrix');
+	var CONTROLS_HTML = '<div class="matrix-presets" style="float:right; margin-top:-12px;">'
+		+ '<select class="matrix-preset-select" style="padding:3px 15px!important; margin-top:5px;"><option value="">- Select A Preset -</option></select> '
+		+ '<input type="button" class="matrix-preset-load btn button--small" value="Load" style="padding:5px 15px!important; margin-top:5px;"> '
+		+ '<input type="button" class="matrix-preset-delete btn remove button--small" value="Delete" style="padding:5px 15px!important; margin-top:5px;"> '
+		+ '<input type="button" class="matrix-preset-save btn action button--small" value="Save" style="padding:5px 15px!important; margin-top:5px;">'
+		+ '</div>';
 
-	// !! For some reason this is loaded before EE variable is ready and then again later when it is
-	if (typeof EE !== 'undefined') {
+	// [fieldId][presetId] => {name, format, values}
+	var presets = {};
 
-		var AJAX_BASE = '<?php echo $base; ?>';
-		EE.SESSION = '';
+	var fieldIds = [];
 
-		if (AJAX_BASE == '') {
-			AJAX_BASE = EE.BASE + "&C=addons_modules&M=show_module_cp&module=matrix_presets&method=";
-		} else {
-			var session = EE.BASE.match(/(S=[\w\d]+)/);
-			if (session) {
-				EE.SESSION = EE.BASE.match(/(S=[\w\d]+)/)[0];
-			}
+	findMatrixFields().each(function() {
+		var fieldId = getFieldId($(this));
+
+		if (fieldIds.indexOf(fieldId) === -1) {
+			fieldIds.push(fieldId);
 		}
+	});
 
-		// Pre EE 2.8 support
-		var CSRF_TOKEN_NAME = 'CSRF_TOKEN';
-
-		if (!EE.CSRF_TOKEN) {
-			EE.CSRF_TOKEN = EE.XID;
-			CSRF_TOKEN_NAME = 'XID';
-		}
-
-		// Get matrix field ids
-		var fieldIds = new Array();
-		matrixFields.each(function() {
-			if ($(this).attr('id')) {
-				var fieldId = parseInt($(this).attr('id').replace('field_id_',''), 10);
-				if (fieldId) {
-					fieldIds.push(fieldId);
-				}
-			}
-		});
-
-		// Need to wait after `document.ready` has finished executing!
-		setTimeout(function() {
-
-				// Make sure that this is the publish form and it has matrix fields
-				// (otherwise get_presets would return every preset on the site)
-				if (!EE.publish || fieldIds.length == 0)
-					return;
-
-				var postData = {'field_ids': fieldIds};
-				postData[CSRF_TOKEN_NAME] = EE.CSRF_TOKEN;
-
-				$.ajax({
-					url: AJAX_BASE + "get_presets&" + EE.SESSION,
-					type: "POST",
-					data: postData,
-					dataType: 'json', //json
-					success:function(data) {
-						if (data.presets) {
-							presets = data.presets;
-						}
-						initPresets(presets);
-						EE.CSRF_TOKEN = data.CSRF_TOKEN;
-						$('input[name='+CSRF_TOKEN_NAME+']').val(data.CSRF_TOKEN);
-					},
-					error:function(jqXHR, textStatus, errorMessage) {
-						console.log('Matrix Presets - '+textStatus+': '+errorMessage);
-					}
-				});
-
-		}, 0);
-
+	if ( ! fieldIds.length) {
+		return;
 	}
 
-	// start the process
-	function initPresets(presets) {
-
-		matrixFields.each(function() {
-
-			//var fieldId = $(this).attr('id').replace('hold_field_','');
-			var fieldId;
-			if ($(this).attr('id')) {
-				fieldId = $(this).attr('id').replace('field_id_','');
-			}
-
-			if ( ! fieldId)
-				return true;
-
-			var buttonsHTML = '<div style="float:right; margin-top:-12px;" class="matrix-presets" data-field-id="' + fieldId + '"><select class="matrix-preset-select" style="padding:3px 15px!important; margin-top:5px;"><option value="">- Select A Preset -</option></select> <input type="button" name="matrix-preset-load" class="matrix-preset-load btn button--small" value="Load" style="padding:5px 15px!important; margin-top:5px;"> <input type="button" name="matrix-preset-delete" class="matrix-preset-delete btn remove button--small" value="Delete" style="padding:5px 15px!important; margin-top:5px;"> <input type="button" name="matrix-preset-save" class="matrix-preset-save btn action button--small" value="Save" style="padding:5px 15px!important; margin-top:5px;"></div>';
-
-			var presetButtons = $(buttonsHTML).appendTo($(this));
-
-			updateSelects(presets, fieldId);
-
-		});
-
-
-		// Load preset button
-		matrixFields.find('.matrix-preset-load').on('click', this, function() {
-
-			var $field = $(this).closest('div.matrix');
-			var fieldId = $(this).closest('.matrix-presets').data('field-id');
-			var presetId = $field.find('.matrix-preset-select').val();
-
-			if (fieldId && presetId != "") {
-
-				var $rows = getMatrixRows($field);
-				//if (!$rows.length)
-				//	return false;
-
-				if (typeof presets[fieldId] == 'undefined' || typeof presets[fieldId][presetId] == 'undefined') {
-					alert('Preset not found');
-					return false;
-				}
-
-				var preset = presets[fieldId][presetId];
-				var values = preset.values || {};
-				var presetFormat = parseInt(preset.format, 10) || 1;
-
-				// Newer presets are keyed by column ID, older ones by column position
-				var keyedByColumn = (presetFormat >= 2);
-
-				// Rows in order (presets saved by 1.3.7 can skip row numbers)
-				var rowKeys = $.map(values, function(value, key) {
-					return key;
-				});
-
-				// Only matrix visible fields
-				var numRows = $rows.length;
-
-				var addEntryButton = $field.find('> a.matrix-btn.matrix-add');
-
-				// Create one row for each value
-				for (var i = 0; i < rowKeys.length; i++)
-					addEntryButton.click();
-
-				// Wait for field to finish initializing...
-				setTimeout(function() {
-					// Skip the placeholder row for "No rows have been added yet..."
-					getMatrixRows($field).slice(numRows).each(function(irow) {
-
-						var $row = $(this);
-						var value = values[rowKeys[irow]];
-
-						if (typeof value !== 'object' || value === null)
-							return true;
-
-						$(this).find('> td.matrix').each(function(icol) {
-
-							var $cell = $(this);
-							var fieldValue = '';
-							var cellValue = value[keyedByColumn ? getColKey($cell, icol) : icol];
-
-							// Column isn't in this preset (e.g. added after the preset was saved)
-							if (typeof cellValue !== 'object' || cellValue === null)
-								return true;
-
-							// Wygwam
-							if ($(this).find('.wygwam-textarea').length > 0) {
-
-							$(this).find('textarea').each(function(ifield) {
-								if (typeof cellValue[ifield] !== "undefined") {
-									//refreshWygwam();
-									var fieldValue = cellValue[ifield];
-									$(this).val(fieldValue);
-									if (typeof Wygwam !== "undefined") {
-										var field_id = $(this).attr('id');
-										var config_handle = $('#'+field_id).data('config');
-										var defer = $('#'+field_id).data('defer');
-
-										if(defer === 'n') defer = false;
-
-										new Wygwam(field_id, config_handle, defer);
-									}
-								}
-							});
-
-							// PT List
-							} else if ($(this).find('ul.pt-list').length > 0) {
-
-								for (var i in cellValue) {
-									if (fieldValue = cellValue[i]) {
-
-										var $cloneField = $(this).closest('td.matrix').find('ul.pt-list li:last');
-
-										if (i != cellValue.length-1)
-											$cloneField.clone().insertAfter($cloneField);
-
-										$cloneField.find('input').val(cellValue[i]);
-									}
-								}
-
-							// PT Pill
-							} else if ($(this).find('ul.pt-pill').length > 0) {
-
-								$(this).find('select').each(function(ifield) {
-									if (fieldValue = cellValue[ifield]) {
-
-										// select option
-										setSelectValue($(this), fieldValue);
-
-										// show selected
-										if ($(this).find('option:selected').length > 0) {
-											$(this).closest('td.matrix').find('ul.pt-pill li').removeClass('selected');
-											var selectedText = $(this).find('option:selected').text();
-											if ($(this).closest('td.matrix').find('ul.pt-pill li.selected').text() != selectedText) {
-												liContaining($(this).closest('td.matrix').find('ul.pt-pill li'), selectedText).click().addClass('selected');
-											}
-										}
-
-									}
-								});
-
-							} else if ($(this).hasClass('matrix-file')) {
-
-								$(this).find('input').each(function(ifield) {
-									// file inputs can't be given a value (it throws)
-									if (this.type === 'file')
-										return true;
-
-									if (fieldValue = cellValue[ifield]) {
-
-										$(this).val(fieldValue);
-
-										if (ifield == 1) {
-											$(this).after($('<div class="matrix-filename">').text(fieldValue));
-											$cell.find('.matrix-btn.matrix-add').hide();
-										}
-									}
-								});
-
-							// Playa (drop panes): select the saved entries.
-							// Presets before format 3 also stored every unselected option, so leave those alone.
-							} else if ($(this).find('.playa-dp').length > 0) {
-								if (presetFormat >= 3) {
-									loadPlayaSelections($cell, cellValue);
-								}
-
-							// All Other Basic Fields
-							} else {
-
-								$(this).find('input, textarea, select').each(function(ifield) {
-
-									// file inputs can't be given a value (it throws); disabled inputs aren't saved
-									if (typeof cellValue[ifield] !== "undefined" && this.type !== 'file' && ! this.disabled) {
-
-										var $input = $(this);
-										var fieldValue = cellValue[ifield];
-
-										// find multiselect value (there is a hidden field within this too)
-										if ($input.is('select[multiple]')) {
-											$input.val(fieldValue);
-
-										// select option or populate if value not found
-										} else if ($input.is('select')) {
-											setSelectValue($input, fieldValue);
-
-										// checkboxes and radios (older presets saved every option's value, checked or not, so leave those alone)
-										} else if ($input.is('input:checkbox, input:radio')) {
-											if (keyedByColumn) {
-												var checked = !!fieldValue;
-
-												// Only click when the state differs, so options checked by default aren't toggled off.
-												// A checked radio can't be unchecked by clicking; checking another option does that.
-												if ($input.prop('checked') !== checked && (checked || $input.is(':checkbox'))) {
-													var $label = $input.closest('label');
-													($label.length ? $label : $input).click();
-												}
-											}
-
-										// basics
-										} else {
-											$input.val(fieldValue);
-										}
-
-									}
-
-								});
-
-							}
-
-
-							// Fieldtype cleanup and show selected
-
-							// PT Switch
-							if ($(this).find('ul.pt-switch').length > 0) {
-								if ($(this).find('option:selected').text() == ""){
-									$(this).find('ul.pt-switch li:empty').click();
-								} else {
-									liContaining($(this).find('ul.pt-switch li'), $(this).find('option:selected').text()).click();
-								}
-
-							}
-
-							// MX Select Plus
-							if ($(this).find('.chzn-container').length > 0) {
-								if(jQuery().trigger) {
-									$(this).find('select').trigger('liszt:updated').trigger("chosen:updated");
-								}
-							}
-
-							// Matrix rich text (EE6+): the editor was created before the textarea was filled
-							var matrixCell = getMatrixCell(this);
-							if (matrixCell && matrixCell.type == 'rte') {
-								fillRte($cell, 0);
-							}
-
-							// EE's React dropdowns (e.g. single Channel Images Select) keep their own state
-							refreshDropdowns($cell);
-
-							// Channel Images Select (multi): rebuild the widget from its loaded hidden input
-							if ($(this).find('.cis-multi').length && window.ChannelImagesSelectMulti) {
-								ChannelImagesSelectMulti.init(this, true);
-							}
-
-							// Assets
-							if ($(this).hasClass('assets') && typeof Assets !== 'undefined' && typeof Assets.actions !== 'undefined') {
-								loadAssetsFiles($cell, cellValue);
-							}
-
-							// ... add more fieldtypes here
-
-							// Ideally we would reinitialize the fields via the Matrix field class after the values has been entered...??!
-
-
-						});
-					});
-				}, 0);
-
-			}
-
-		});
-
-
-		// Save preset button
-		matrixFields.find('.matrix-preset-save').on('click', function() {
-
-			var $field = $(this).closest('div.matrix');
-			var fieldId = $(this).closest('.matrix-presets').data('field-id');
-			//var groupId = EE.publish.field_group;
-
-			if (!fieldId)
-				return false;
-
-			// if no rows exist, do nothing
-			var $rows = getMatrixRows($field);
-			if (!$rows.length)
-				return false;
-
-			var presetId = $field.find('.matrix-preset-select').val();
-			var presetName = $field.find('.matrix-preset-select option:selected').text();
-
-			// Is this a new preset?
-			var newPreset = false;
-			if (!presetId) {
-				newPreset = true;
-				presetId = 0;
-
-				presetName = prompt("Please name your preset");
-
-				if (!presetName)
-					return false;
+	request('get_presets')
+		.done(function() {
+			initFields(findMatrixFields());
+		})
+		.fail(function(jqXHR) {
+			// Without access to the add-on, just don't show the buttons
+			if (jqXHR.status == 403) {
+				console.info('Matrix Presets: this member role does not have access to the add-on');
 			} else {
-
-				var answer = confirm("Overwrite this preset?\n'"+presetName+"'");
-
-				if (!answer)
-					return false;
-			}
-
-			// Get the row data and save
-			var numRows = $rows.length;
-
-			// simpler to use objects when sending to PHP
-			var presetValues = {}
-			presetValues[fieldId] = {}
-			presetValues[fieldId][presetId] = {'name':presetName, 'format':PRESET_FORMAT};
-
-			var fieldRow = {};
-
-			// search all field types (more to add)
-			$rows.each(function(irow) {
-				fieldRow[irow] = {};
-				$(this).find('> td.matrix').each(function(icol) {
-					var colKey = getColKey($(this), icol);
-					fieldRow[irow][colKey] = {};
-					$(this).find('input, textarea, select').each(function(ifield) {
-						// disabled inputs aren't submitted (e.g. Playa's unselected options), so aren't stored
-						if (this.disabled) {
-							fieldRow[irow][colKey][ifield] = null;
-
-						// checkboxes and radios only store their value when checked
-						} else if ($(this).is('input:checkbox, input:radio')) {
-							fieldRow[irow][colKey][ifield] = $(this).prop('checked') ? $(this).val() : null;
-						} else {
-							fieldRow[irow][colKey][ifield] = $(this).val();
-						}
-					});
-				});
-			});
-
-			presetValues[fieldId][presetId].values = fieldRow;
-
-			var postData = {'field_ids': fieldIds, 'preset': presetValues, 'newpreset': newPreset};
-			postData[CSRF_TOKEN_NAME] = EE.CSRF_TOKEN;
-
-			$.ajax({
-				url: AJAX_BASE + "save_preset&" + EE.SESSION,
-				type: "POST",
-				data: postData,
-				dataType: 'json', //json
-				success:function(data) {
-					presets = data.presets;
-					updateSelects(presets, fieldId);
-					EE.CSRF_TOKEN = data.CSRF_TOKEN;
-				},
-				error:function(jqXHR, textStatus, errorMessage) {
-					alert(textStatus+': '+errorMessage);
-				}
-			});
-
-
-
-		});
-
-		// Delete preset button
-		matrixFields.find('.matrix-preset-delete').on('click', this, function() {
-
-			var $field = $(this).closest('div.matrix');
-			var fieldId = $(this).closest('.matrix-presets').data('field-id');
-			//var groupId = EE.publish.field_group;
-
-			var presetId = $field.find('.matrix-preset-select').val();
-			var presetName = $field.find('.matrix-preset-select option:selected').text();
-
-			if (!fieldId || !presetId)
-				return false;
-
-			var answer = confirm("Are you sure you want to delete this preset? \n'"+presetName+"'");
-
-			if (!answer)
-				return false;
-
-			var postData = {'field_ids': fieldIds, 'field_id': fieldId, 'preset_id': presetId};
-			postData[CSRF_TOKEN_NAME] = EE.CSRF_TOKEN;
-
-			$.ajax({
-				url: AJAX_BASE + "delete_preset&" + EE.SESSION,
-				type: "POST",
-				data: postData,
-				dataType: 'json',
-				success:function(data) {
-					presets = data.presets;
-					updateSelects(presets, fieldId);
-					EE.CSRF_TOKEN = data.CSRF_TOKEN;
-				},
-				error:function(jqXHR, textStatus, errorMessage) {
-					alert(textStatus+': '+errorMessage);
-				}
-			});
-
-		});
-
-	}
-
-	// Update preset select menu for this field
-	function updateSelects(presets, fieldId) {
-
-		// remove any if already added
-		var presetSelect = $('#field_id_'+fieldId+'.matrix select.matrix-preset-select');
-		presetSelect.find('option:not(:first)').remove();
-
-		// search presets array to add to the individual select menus
-		if (typeof presets[fieldId] != 'undefined') {
-			// add options to selects (as text, so names can't inject HTML)
-			for (var i in presets[fieldId]) {
-				if (presets[fieldId][i]) {
-					presetSelect.append($('<option>').val(i).text(presets[fieldId][i].name));
-				}
-			}
-
-		}
-	}
-
-	// The Matrix field's own rows (not rows of tables inside cells, such as Playa's drop panes)
-	function getMatrixRows($field) {
-		return $field.find('> table > tbody > tr:not(.matrix-norows):visible');
-	}
-
-	// Key for a cell's preset values: its Matrix column ID (from Matrix, or the input names
-	// field_id_N[row_x][col_id_N]...), or its position if there isn't one
-	function getColKey($cell, icol) {
-		var matrixCell = getMatrixCell($cell[0]);
-		if (matrixCell && matrixCell.col && /^col_id_\d+$/.test(matrixCell.col.id)) {
-			return matrixCell.col.id;
-		}
-
-		var colKey = icol;
-		$cell.find('[name]').each(function() {
-			var match = String(this.name).match(/\[(col_id_\d+)\]/);
-			if (match) {
-				colKey = match[1];
-				return false;
+				console.warn('Matrix Presets: ' + errorMessage(jqXHR));
 			}
 		});
-		return colKey;
+
+
+	// ------------------------------------------------------------------
+	// Matrix fields
+
+	// Matrix field ID from the field's id ("field_id_12")
+	function getFieldId($field) {
+		var match = String($field.attr('id') || '').match(/^field_id_(\d+)$/);
+
+		return match ? parseInt(match[1], 10) : false;
 	}
 
-	// Select an option, adding it first if it doesn't exist (as text, so values can't inject HTML)
-	function setSelectValue($select, value) {
-		var optionExists = $select.find('option').filter(function() {
-			return this.value == value;
-		}).length > 0;
-		if ( ! optionExists) {
-			$select.prepend($('<option>').val(value).text(value));
-		}
-		$select.val(value);
-	}
-
-	// Same as li:contains("text") without building a selector from the text (quotes would break it)
-	function liContaining($items, text) {
-		return $items.filter(function() {
-			return $(this).text().indexOf(text) !== -1;
+	function findMatrixFields() {
+		return $('div.matrix').filter(function() {
+			return getFieldId($(this)) !== false;
 		});
 	}
 
-	// Matrix's own object for a cell's <td> (celltypes such as Assets keep their field instance on it).
-	// Matrix only sets up a field's rows once it's visible, so this can be null.
-	function getMatrixCell(td) {
-		if (typeof Matrix === 'undefined' || ! Matrix.instances)
+	// The field's own rows (not the "no rows" row, or rows of tables inside cells such as Playa's)
+	function getRows($field) {
+		return $field.children('table').first()
+			.children('tbody').children('tr')
+			.not('.matrix-norows');
+	}
+
+	// Matrix's own object for the field (Matrix only sets up a field's rows once it's visible)
+	function getMatrix($field) {
+		if (typeof Matrix === 'undefined' || ! Matrix.instances) {
 			return null;
+		}
+
+		for (var i = 0; i < Matrix.instances.length; i++) {
+			var matrix = Matrix.instances[i];
+
+			if (matrix.dom && matrix.dom.$field && matrix.dom.$field[0] === $field[0]) {
+				return matrix;
+			}
+		}
+
+		return null;
+	}
+
+	// Matrix's own object for a cell's <td> (celltypes such as Assets keep their field instance on it)
+	function getMatrixCell(td) {
+		if (typeof Matrix === 'undefined' || ! Matrix.instances) {
+			return null;
+		}
 
 		for (var i = 0; i < Matrix.instances.length; i++) {
 			var rows = Matrix.instances[i].rows || [];
+
 			for (var r = 0; r < rows.length; r++) {
 				var cells = rows[r].cells || [];
+
 				for (var c = 0; c < cells.length; c++) {
 					if (cells[c].dom && cells[c].dom.$td && cells[c].dom.$td[0] === td) {
 						return cells[c];
@@ -556,90 +119,575 @@ $(document).ready(function(){
 		return null;
 	}
 
-	// Assets: add the saved files to a cell
-	function loadAssetsFiles($cell, cellValue) {
+	// Key for a cell's preset values: its Matrix column ID (from Matrix, or the input names
+	// field_id_N[row_x][col_id_N]...), or its position if there isn't one
+	function getColKey($cell, icol) {
+		var matrixCell = getMatrixCell($cell[0]);
 
-		// Saved file IDs in order, without repeats (Assets' drag placeholder copies the first file's input)
-		var fileIds = [];
-		$.each(cellValue, function(i, id) {
-			if (id && $.inArray(String(id), fileIds) === -1) {
-				fileIds.push(String(id));
+		if (matrixCell && matrixCell.col && /^col_id_\d+$/.test(matrixCell.col.id)) {
+			return matrixCell.col.id;
+		}
+
+		var colKey = icol;
+
+		$cell.find('[name]').each(function() {
+			var match = String(this.name).match(/\[(col_id_\d+)\]/);
+
+			if (match) {
+				colKey = match[1];
+				return false;
 			}
 		});
 
-		if ( ! fileIds.length)
-			return;
+		return colKey;
+	}
 
-		var matrixCell = getMatrixCell($cell[0]);
+	// Add the preset controls to each Matrix field (once)
+	function initFields($fields) {
+		$fields.each(function() {
+			var $field = $(this);
 
-		// Let the cell's Assets field add them, so they can be removed, reordered and saved as usual
-		if (matrixCell && matrixCell.assetsField && typeof matrixCell.assetsField._selectFiles === 'function') {
-			matrixCell.assetsField._selectFiles($.map(fileIds, function(id) {
-				return {id: id};
-			}));
-			return;
-		}
+			if ($field.data('matrixPresets')) {
+				return;
+			}
 
-		// Otherwise just show the thumbnails
-		var $assetsField = $cell.find('.assets-field');
-		var field_name = (matrixCell && matrixCell.field && matrixCell.row && matrixCell.col)
-			? matrixCell.field.id+'['+matrixCell.row.id+']['+matrixCell.col.id+']'
-			: ($cell.find('input').attr('name') || '').replace(/\[\]$/, "");
-		var col_match = field_name.match(/\[([^\]]+)\]*$/);
-		var col_id = col_match ? col_match[1] : '';
+			var $controls = $(CONTROLS_HTML).data('field', $field).appendTo($field);
 
-		var postData = {
-			'ACT': Assets.actions.get_selected_files,
-			'field_id': $assetsField.attr('id'),
-			'field_name': field_name,
-			'requestId': 1,
-			'show_filenames': 'y',
-			'thumb_size': 'small',
-			'view': 'thumbs'
-		};
-		// get settings
-		if (Assets.Field && Assets.Field.matrixConfs && typeof Assets.Field.matrixConfs[col_id] !== 'undefined') {
-			postData['show_filenames'] = Assets.Field.matrixConfs[col_id].show_filenames;
-			postData['thumb_size'] = Assets.Field.matrixConfs[col_id].thumb_size;
-			postData['view'] = Assets.Field.matrixConfs[col_id].view;
-		}
-
-		$.each(fileIds, function(i, id) {
-			postData['file_id['+i+']'] = id;
+			$field.data('matrixPresets', $controls);
+			updateSelect($controls);
 		});
+	}
 
-		// Get thumbnails
-		$.ajax({
-			url: Assets.siteUrl || "/",
-			type: "POST",
-			data: postData,
-			dataType: 'json',
-			success:function(data) {
-				if (data.html) {
-					$assetsField.find('.assets-thumbview ul').append(data.html);
+	// Refresh the preset menu
+	function updateSelect($controls) {
+		var fieldId = getFieldId($controls.data('field'));
+		var $select = $controls.find('select.matrix-preset-select');
 
-					// Thumbnail sizes/images come as CSS
-					if (data.css) {
-						$('<style>' + data.css + '</style>').appendTo('head');
-					}
+		$select.find('option').slice(1).remove();
 
-					// Can't use buttons correctly so let's just hide them
-					$cell.find('.assets-buttons .assets-btn').slideUp('slow');
-				}
-			},
-			error:function(jqXHR, textStatus, errorMessage) {
-				alert(textStatus+': '+errorMessage);
+		$.each(presets[fieldId] || {}, function(presetId, preset) {
+			if (preset) {
+				// as text, so names can't inject HTML
+				$select.append($('<option>').val(presetId).text(preset.name));
 			}
 		});
 	}
 
-	// Put the (loaded) textarea content into the cell's rich text editor
+	function selectedText($select) {
+		return $select.find('option').eq($select.prop('selectedIndex')).text();
+	}
+
+
+	// ------------------------------------------------------------------
+	// Buttons
+
+	// Load preset
+	$(document).on('click', '.matrix-presets .matrix-preset-load', function() {
+		var $controls = $(this).closest('.matrix-presets');
+		var $field = $controls.data('field');
+		var fieldId = getFieldId($field);
+		var presetId = $controls.find('.matrix-preset-select').val();
+
+		if ( ! presetId) {
+			return false;
+		}
+
+		var preset = presets[fieldId] && presets[fieldId][presetId];
+
+		if ( ! preset) {
+			alert('Preset not found');
+			return false;
+		}
+
+		loadRows($field, preset.values || {}, parseInt(preset.format, 10) || 1);
+	});
+
+	// Save preset (new, or overwrite the selected one)
+	$(document).on('click', '.matrix-presets .matrix-preset-save', function() {
+		var $controls = $(this).closest('.matrix-presets');
+		var $field = $controls.data('field');
+		var fieldId = getFieldId($field);
+		var $select = $controls.find('.matrix-preset-select');
+		var $rows = getRows($field);
+
+		if ( ! $rows.length) {
+			alert('Add some rows to save them as a preset.');
+			return false;
+		}
+
+		var presetId = $select.val();
+		var presetName;
+
+		if ( ! presetId) {
+			presetId = 0;
+			presetName = prompt('Please name your preset');
+
+			if ( ! presetName) {
+				return false;
+			}
+		} else {
+			presetName = selectedText($select);
+
+			if ( ! confirm("Overwrite this preset?\n'" + presetName + "'")) {
+				return false;
+			}
+		}
+
+		request('save_preset', {
+			field_id: fieldId,
+			preset_id: presetId,
+			name: presetName,
+			format: PRESET_FORMAT,
+			values: JSON.stringify(collectRows($rows))
+		})
+			.done(function(response) {
+				updateSelect($controls);
+
+				// Select the saved preset
+				$select.val(String(response.preset_id));
+			})
+			.fail(function(jqXHR) {
+				alert(errorMessage(jqXHR));
+			});
+	});
+
+	// Delete preset
+	$(document).on('click', '.matrix-presets .matrix-preset-delete', function() {
+		var $controls = $(this).closest('.matrix-presets');
+		var fieldId = getFieldId($controls.data('field'));
+		var $select = $controls.find('.matrix-preset-select');
+		var presetId = $select.val();
+
+		if ( ! presetId) {
+			return false;
+		}
+
+		if ( ! confirm("Are you sure you want to delete this preset?\n'" + selectedText($select) + "'")) {
+			return false;
+		}
+
+		request('delete_preset', {field_id: fieldId, preset_id: presetId})
+			.done(function() {
+				updateSelect($controls);
+			})
+			.fail(function(jqXHR) {
+				alert(errorMessage(jqXHR));
+			});
+	});
+
+
+	// ------------------------------------------------------------------
+	// Requests
+
+	function request(method, data) {
+		data = $.extend({field_ids: fieldIds, CSRF_TOKEN: EE.CSRF_TOKEN}, data || {});
+
+		return $.ajax({
+			url: URLS[method],
+			type: 'POST',
+			data: data,
+			dataType: 'json'
+		}).done(function(response) {
+			if (response && response.presets) {
+				presets = response.presets;
+			}
+		});
+	}
+
+	function errorMessage(jqXHR) {
+		if (jqXHR.status == 403) {
+			return "You don't have access to Matrix Presets. An administrator can give your member role access to the add-on.";
+		}
+
+		if (jqXHR.responseJSON && jqXHR.responseJSON.error) {
+			return jqXHR.responseJSON.error;
+		}
+
+		return 'Matrix Presets request failed' + (jqXHR.statusText ? ': ' + jqXHR.statusText : '');
+	}
+
+
+	// ------------------------------------------------------------------
+	// Save
+
+	// Rows as [ {columnKey: [input values]} ]
+	function collectRows($rows) {
+		var rows = [];
+
+		$rows.each(function() {
+			var row = {};
+
+			$(this).children('td.matrix').each(function(icol) {
+				var $cell = $(this);
+				var values = [];
+
+				$cell.find('input, textarea, select').each(function() {
+					values.push(inputValue(this));
+				});
+
+				row[getColKey($cell, icol)] = values;
+			});
+
+			rows.push(row);
+		});
+
+		return rows;
+	}
+
+	// What's stored for an input (null: nothing to load)
+	function inputValue(input) {
+		// Not submitted (e.g. Playa's unselected options), a file upload, or Chosen's search box
+		if (input.disabled || input.type === 'file' || isChosenInput(input)) {
+			return null;
+		}
+
+		// Checkboxes and radios: the value only when checked
+		if (input.type === 'checkbox' || input.type === 'radio') {
+			return input.checked ? $(input).val() : null;
+		}
+
+		return $(input).val();
+	}
+
+	function isChosenInput(input) {
+		return $(input).closest('.chzn-container, .chosen-container').length > 0;
+	}
+
+
+	// ------------------------------------------------------------------
+	// Load
+
+	// EE validates each field over AJAX (posting the whole form) when it changes. Filling rows
+	// changes many fields at once, so skip those requests while loading; saving still validates.
+	var validationPauses = 0;
+
+	function pauseValidation() {
+		var validation = EE.cp && EE.cp.formValidation;
+
+		if (validation && typeof validation.pause === 'function') {
+			validationPauses++;
+			validation.pause(true);
+		}
+	}
+
+	function resumeValidation() {
+		var validation = EE.cp && EE.cp.formValidation;
+
+		if ( ! validation || typeof validation.resume !== 'function') {
+			return;
+		}
+
+		// Let the celltypes' own delayed change handlers run first
+		setTimeout(function() {
+			validationPauses = Math.max(0, validationPauses - 1);
+
+			if (validationPauses === 0) {
+				validation.resume();
+			}
+		}, 1000);
+	}
+
+	// Add a row for each set of values, then fill them in (up to the field's maximum rows).
+	// values: [ {columnKey: [input values]} ]
+	function loadRows($field, values, format) {
+		var rowKeys = Object.keys(values || {});
+		var existingRows = getRows($field).length;
+		var matrix = getMatrix($field);
+
+		format = format || PRESET_FORMAT;
+
+		if ( ! rowKeys.length) {
+			return;
+		}
+
+		pauseValidation();
+
+		$.each(rowKeys, function() {
+			if (matrix) {
+				// Nothing is added at the field's maximum rows
+				if ( ! matrix.addRow()) {
+					return false;
+				}
+			} else {
+				$field.children('a.matrix-add').first().trigger('click');
+			}
+		});
+
+		// Let the new rows' celltypes finish initialising
+		setTimeout(function() {
+			try {
+				getRows($field).slice(existingRows).each(function(irow) {
+					if (irow < rowKeys.length) {
+						fillRow($(this), values[rowKeys[irow]], format);
+					}
+				});
+			} finally {
+				resumeValidation();
+			}
+		}, 0);
+	}
+
+	function fillRow($row, value, format) {
+		if (typeof value !== 'object' || value === null) {
+			return;
+		}
+
+		// Newer presets are keyed by column ID, older ones by column position
+		var keyedByColumn = (format >= 2);
+
+		$row.children('td.matrix').each(function(icol) {
+			var $cell = $(this);
+			var cellValue = value[keyedByColumn ? getColKey($cell, icol) : icol];
+
+			// Column isn't in this preset (e.g. added after the preset was saved)
+			if (typeof cellValue !== 'object' || cellValue === null) {
+				return;
+			}
+
+			fillCell($cell, cellValue, format);
+		});
+	}
+
+	function fillCell($cell, cellValue, format) {
+		var matrixCell = getMatrixCell($cell[0]);
+		var celltype = matrixCell ? matrixCell.type : '';
+
+		// Wygwam
+		if ($cell.find('.wygwam-textarea').length) {
+			fillInputs($cell, cellValue, format);
+			fillWygwam($cell);
+
+		// PT List
+		} else if ($cell.find('ul.pt-list').length) {
+			fillList($cell, cellValue);
+
+		// PT Pill
+		} else if ($cell.find('ul.pt-pill').length) {
+			fillPill($cell, cellValue);
+
+		// Matrix File
+		} else if ($cell.hasClass('matrix-file')) {
+			fillFile($cell, cellValue);
+
+		// Playa (drop panes): select the saved entries.
+		// Presets before format 3 also stored every unselected option, so leave those alone.
+		} else if ($cell.find('.playa-dp').length) {
+			if (format >= 3) {
+				loadPlayaSelections($cell, cellValue);
+			}
+
+		} else {
+			fillInputs($cell, cellValue, format);
+		}
+
+		// Celltypes that need their display updating
+
+		// PT Switch
+		if ($cell.find('ul.pt-switch').length) {
+			var switchText = $cell.find('option:selected').text();
+
+			if (switchText === '') {
+				$cell.find('ul.pt-switch li:empty').trigger('click');
+			} else {
+				liContaining($cell.find('ul.pt-switch li'), switchText).trigger('click');
+			}
+		}
+
+		// Matrix rich text: the editor was created before the textarea was filled
+		if (celltype == 'rte') {
+			fillRte($cell, 0);
+		}
+
+		// EE's React dropdowns (e.g. single Channel Images Select) keep their own state
+		refreshDropdowns($cell);
+
+		// Channel Images Select (multi): rebuild the widget from its loaded hidden input
+		if ($cell.find('.cis-multi').length && window.ChannelImagesSelectMulti) {
+			ChannelImagesSelectMulti.init($cell[0], true);
+		}
+
+		// Assets
+		if ($cell.hasClass('assets') && typeof Assets !== 'undefined' && typeof Assets.actions !== 'undefined') {
+			loadAssetsFiles($cell, cellValue);
+		}
+	}
+
+	// Inputs in the order they were saved
+	function fillInputs($cell, cellValue, format) {
+		$cell.find('input, textarea, select').each(function(ifield) {
+			var $input = $(this);
+			var fieldValue = cellValue[ifield];
+
+			// Not saved, can't be set (file uploads), or not a value (disabled inputs, Chosen's search box)
+			if (typeof fieldValue === 'undefined' || this.type === 'file' || this.disabled || isChosenInput(this)) {
+				return;
+			}
+
+			// Checkboxes and radios (older presets saved every option's value, checked or not, so leave those alone)
+			if (this.type === 'checkbox' || this.type === 'radio') {
+				if (format >= 2) {
+					setChecked($input, !! fieldValue);
+				}
+				return;
+			}
+
+			if (fieldValue === null) {
+				return;
+			}
+
+			if ($input.is('select')) {
+				setSelectValues($input, fieldValue);
+			} else {
+				$input.val(fieldValue);
+			}
+		});
+	}
+
+	// Only click when the state differs, so options checked by default aren't toggled off.
+	// A checked radio can't be unchecked by clicking; checking another option does that.
+	function setChecked($input, checked) {
+		if ($input.prop('checked') !== checked && (checked || $input.is('[type=checkbox]'))) {
+			var $label = $input.closest('label');
+
+			($label.length ? $label : $input).trigger('click');
+		}
+	}
+
+	// Select the value(s), adding any options that aren't there (as text, so values can't inject HTML)
+	function setSelectValues($select, value) {
+		var selectValues = Array.isArray(value) ? value : [value];
+
+		$.each(selectValues, function(i, optionValue) {
+			if (optionValue === '' || optionValue === null) {
+				return;
+			}
+
+			var optionExists = $select.find('option').filter(function() {
+				return this.value == optionValue;
+			}).length > 0;
+
+			if ( ! optionExists) {
+				$select.prepend($('<option>').val(optionValue).text(optionValue));
+			}
+		});
+
+		$select.val($select.prop('multiple') ? selectValues : value);
+
+		// Chosen (e.g. MX Select Plus) only redraws when told to
+		$select.trigger('liszt:updated').trigger('chosen:updated');
+	}
+
+	// Same as li:contains("text") without building a selector from the text (quotes would break it)
+	function liContaining($items, text) {
+		return $items.filter(function() {
+			return $(this).text().indexOf(text) !== -1;
+		});
+	}
+
+	// PT List: one list item per value
+	function fillList($cell, cellValue) {
+		var total = cellValue.length;
+
+		$.each(cellValue, function(i, listValue) {
+			if ( ! listValue) {
+				return;
+			}
+
+			var $item = $cell.find('ul.pt-list li').last();
+
+			if (i != total - 1) {
+				$item.clone().insertAfter($item);
+			}
+
+			$item.find('input').val(listValue);
+		});
+	}
+
+	// PT Pill: select the value and highlight its pill
+	function fillPill($cell, cellValue) {
+		$cell.find('select').each(function(ifield) {
+			var fieldValue = cellValue[ifield];
+
+			if ( ! fieldValue) {
+				return;
+			}
+
+			setSelectValues($(this), fieldValue);
+
+			var selectedText = $(this).find('option:selected').text();
+			var $pills = $cell.find('ul.pt-pill li');
+
+			if (selectedText) {
+				$pills.removeClass('selected');
+				liContaining($pills, selectedText).trigger('click').addClass('selected');
+			}
+		});
+	}
+
+	// Matrix File: the directory and file name inputs, showing the file name
+	function fillFile($cell, cellValue) {
+		$cell.find('input').each(function(ifield) {
+			var fieldValue = cellValue[ifield];
+
+			// File inputs can't be given a value (it throws)
+			if (this.type === 'file' || ! fieldValue) {
+				return;
+			}
+
+			$(this).val(fieldValue);
+
+			if (ifield == 1) {
+				$(this).after($('<div class="matrix-filename">').text(fieldValue));
+				$cell.find('.matrix-btn.matrix-add').hide();
+			}
+		});
+	}
+
+	// Wygwam: put the loaded textarea content into the cell's editor
+	function fillWygwam($cell) {
+		var $textarea = $cell.find('textarea[name]').first();
+		var id = $textarea.attr('id');
+		var html = $textarea.val();
+		var editor = (id && window.CKEDITOR && CKEDITOR.instances) ? CKEDITOR.instances[id] : null;
+
+		if (editor) {
+			if (editor.status === 'ready') {
+				editor.setData(html);
+			} else {
+				editor.on('instanceReady', function() {
+					editor.setData(html);
+				});
+			}
+			return;
+		}
+
+		// Deferred editor: a preview until clicked (the editor is then created from the textarea)
+		var $preview = $cell.find('iframe.wygwam');
+
+		if ($preview.length && $preview[0].contentWindow) {
+			$preview[0].contentWindow.document.body.innerHTML = html;
+			return;
+		}
+
+		// No editor yet
+		if (typeof Wygwam !== 'undefined' && id) {
+			var matrixCell = getMatrixCell($cell[0]);
+			var config = (matrixCell && Wygwam.matrixColConfigs && Wygwam.matrixColConfigs[matrixCell.col.id])
+				|| [$textarea.data('config'), $textarea.data('defer') == 'y'];
+
+			new Wygwam(id, config[0], config[1]);
+		}
+	}
+
+	// Rich text: the editor is created when the row is added (before the textarea is filled),
+	// so pass the content to it once it exists
 	function fillRte($cell, attempts) {
 		// Matrix's own input (editors can add textareas of their own)
 		var textarea = $cell.find('textarea[name]').get(0) || $cell.find('textarea').get(0);
 
-		if ( ! textarea)
+		if ( ! textarea) {
 			return;
+		}
 
 		var html = textarea.value;
 
@@ -685,98 +733,34 @@ $(document).ready(function(){
 
 	// Re-render EE's React dropdowns with the loaded value selected (they don't read their hidden input back)
 	function refreshDropdowns($cell) {
-		if (typeof Dropdown === 'undefined' || typeof ReactDOM === 'undefined')
+		if (typeof Dropdown === 'undefined' || typeof ReactDOM === 'undefined') {
 			return;
+		}
 
 		$cell.find('div[data-dropdown-react]').each(function() {
 			var value = $(this).find('input[type=hidden]').first().val();
 
-			if ( ! value)
+			if ( ! value) {
 				return;
+			}
 
 			// A value missing from the options would render empty, so leave those as they are
 			var props;
+
 			try {
 				props = JSON.parse(window.atob($(this).data('dropdownReact')));
 			} catch (e) {
 				return;
 			}
 
-			if ( ! props || ! hasDropdownItem(props.items, value))
+			if ( ! props || ! hasDropdownItem(props.items, value)) {
 				return;
+			}
 
 			$(this).data('initialValue', value);
 			ReactDOM.unmountComponentAtNode(this);
 			Dropdown.renderFields($(this).parent());
 		});
-	}
-
-	// Playa (drop panes): move the saved entries into the selections pane, in order,
-	// the same way Playa's own select button does
-	function loadPlayaSelections($cell, cellValue) {
-		var $playa = $cell.find('.playa-dp').first();
-		var $options = $playa.find('.playa-dp-options > div > ul');
-		var $caboose = $playa.find('.playa-dp-selections > div > ul > li.playa-dp-caboose');
-		var selected = 0;
-
-		if ( ! $caboose.length)
-			return;
-
-		$.each(cellValue, function(i, entryId) {
-			if ( ! entryId)
-				return true;
-
-			// the (unselected) option for this entry
-			var $item = $options.children('li.playa-entry').not('.playa-dp-placeholder, .playa-dp-selected').filter(function() {
-				return $(this).find('input').val() == entryId;
-			}).first();
-
-			if ( ! $item.length)
-				return true;
-
-			$item.removeClass('playa-dp-active').addClass('playa-dp-selected');
-
-			// hold the option's position with a placeholder
-			$('<li />').attr('id', $item.attr('id') + '-placeholder').addClass('playa-dp-placeholder').insertAfter($item);
-
-			// enable inputs
-			$item.find('*[name]').each(function() {
-				var name = $(this).attr('name').match(/^(.*)\[options\](.*)$/);
-				if (name) {
-					$(this).attr('name', name[1] + '[selections]' + name[2]);
-				}
-				$(this).removeAttr('disabled');
-			});
-
-			$item.insertBefore($caboose);
-			selected++;
-		});
-
-		if ( ! selected)
-			return;
-
-		// let Playa pick up the moved items
-		var instance = getPlayaInstance($playa[0]);
-		if (instance) {
-			instance.optionsSelect.updateItems();
-			instance.selectionsSelect.updateItems();
-		}
-
-		$playa.trigger('change');
-	}
-
-	function getPlayaInstance(el) {
-		if (typeof PlayaDropPanes === 'undefined' || ! PlayaDropPanes.instances)
-			return null;
-
-		for (var i = 0; i < PlayaDropPanes.instances.length; i++) {
-			var instance = PlayaDropPanes.instances[i];
-			if (instance.dom && instance.dom.$field && instance.dom.$field[0] === el && instance.optionsSelect && instance.selectionsSelect) {
-				return instance;
-			}
-		}
-
-		return null;
 	}
 
 	function hasDropdownItem(items, value) {
@@ -792,5 +776,152 @@ $(document).ready(function(){
 		return found;
 	}
 
+	// Assets: add the saved files to a cell
+	function loadAssetsFiles($cell, cellValue) {
+
+		// Saved file IDs in order, without repeats (Assets' drag placeholder copies the first file's input)
+		var fileIds = [];
+
+		$.each(cellValue, function(i, id) {
+			if (id && fileIds.indexOf(String(id)) === -1) {
+				fileIds.push(String(id));
+			}
+		});
+
+		if ( ! fileIds.length) {
+			return;
+		}
+
+		var matrixCell = getMatrixCell($cell[0]);
+
+		// Let the cell's Assets field add them, so they can be removed, reordered and saved as usual
+		if (matrixCell && matrixCell.assetsField && typeof matrixCell.assetsField._selectFiles === 'function') {
+			matrixCell.assetsField._selectFiles($.map(fileIds, function(id) {
+				return {id: id};
+			}));
+			return;
+		}
+
+		// Otherwise just show the thumbnails
+		var $assetsField = $cell.find('.assets-field');
+		var fieldName = (matrixCell && matrixCell.field && matrixCell.row && matrixCell.col)
+			? matrixCell.field.id + '[' + matrixCell.row.id + '][' + matrixCell.col.id + ']'
+			: String($cell.find('input').attr('name') || '').replace(/\[\]$/, '');
+		var colMatch = fieldName.match(/\[([^\]]+)\]*$/);
+		var colId = colMatch ? colMatch[1] : '';
+		var conf = (Assets.Field && Assets.Field.matrixConfs && Assets.Field.matrixConfs[colId]) || {};
+
+		var postData = {
+			'ACT': Assets.actions.get_selected_files,
+			'field_id': $assetsField.attr('id'),
+			'field_name': fieldName,
+			'requestId': 1,
+			'show_filenames': conf.show_filenames || 'y',
+			'thumb_size': conf.thumb_size || 'small',
+			'view': conf.view || 'thumbs'
+		};
+
+		$.each(fileIds, function(i, id) {
+			postData['file_id[' + i + ']'] = id;
+		});
+
+		$.ajax({
+			url: Assets.siteUrl || '/',
+			type: 'POST',
+			data: postData,
+			dataType: 'json'
+		}).done(function(response) {
+			if (response.html) {
+				$assetsField.find('.assets-thumbview > ul').append(response.html);
+
+				// Thumbnail sizes/images come as CSS
+				if (response.css) {
+					$('<style>' + response.css + '</style>').appendTo('head');
+				}
+
+				// Without the Assets field the buttons can't work, so hide them
+				$cell.find('.assets-buttons .assets-btn').slideUp('slow');
+			}
+		}).fail(function(jqXHR) {
+			console.warn('Matrix Presets: Assets files could not be loaded (' + jqXHR.status + ')');
+		});
+	}
+
+	// Playa (drop panes): move the saved entries into the selections pane, in order,
+	// the same way Playa's own select button does
+	function loadPlayaSelections($cell, cellValue) {
+		var $playa = $cell.find('.playa-dp').first();
+		var $options = $playa.find('.playa-dp-options > div > ul');
+		var $caboose = $playa.find('.playa-dp-selections > div > ul > li.playa-dp-caboose');
+		var selected = 0;
+
+		if ( ! $caboose.length) {
+			return;
+		}
+
+		$.each(cellValue, function(i, entryId) {
+			if ( ! entryId) {
+				return;
+			}
+
+			// The (unselected) option for this entry
+			var $item = $options.children('li.playa-entry').not('.playa-dp-placeholder, .playa-dp-selected').filter(function() {
+				return $(this).find('input').val() == entryId;
+			}).first();
+
+			if ( ! $item.length) {
+				return;
+			}
+
+			$item.removeClass('playa-dp-active').addClass('playa-dp-selected');
+
+			// Hold the option's position with a placeholder
+			$('<li />').attr('id', $item.attr('id') + '-placeholder').addClass('playa-dp-placeholder').insertAfter($item);
+
+			// Enable inputs
+			$item.find('[name]').each(function() {
+				var name = $(this).attr('name').match(/^(.*)\[options\](.*)$/);
+
+				if (name) {
+					$(this).attr('name', name[1] + '[selections]' + name[2]);
+				}
+
+				$(this).removeAttr('disabled');
+			});
+
+			$item.insertBefore($caboose);
+			selected++;
+		});
+
+		if ( ! selected) {
+			return;
+		}
+
+		// Let Playa pick up the moved items
+		var instance = getPlayaInstance($playa[0]);
+
+		if (instance) {
+			instance.optionsSelect.updateItems();
+			instance.selectionsSelect.updateItems();
+		}
+
+		$playa.trigger('change');
+	}
+
+	function getPlayaInstance(el) {
+		if (typeof PlayaDropPanes === 'undefined' || ! PlayaDropPanes.instances) {
+			return null;
+		}
+
+		for (var i = 0; i < PlayaDropPanes.instances.length; i++) {
+			var instance = PlayaDropPanes.instances[i];
+
+			if (instance.dom && instance.dom.$field && instance.dom.$field[0] === el && instance.optionsSelect && instance.selectionsSelect) {
+				return instance;
+			}
+		}
+
+		return null;
+	}
 
 });

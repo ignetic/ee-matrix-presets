@@ -1,70 +1,55 @@
 <?php if (! defined('APP_VER')) exit('No direct script access allowed');
 
 /**
- * ExpressionEngine Matrix Presets Module Control Panel File
+ * ExpressionEngine Matrix Presets Extension File
  *
  * @package		Matrix Presets
  * @subpackage	Addons
- * @category	Module
+ * @category	Extension
  * @author		Simon Andersohn
- * @link		
+ * @link		https://github.com/ignetic/ee-matrix-presets
  */
- 
+
 require_once PATH_THIRD.'matrix_presets/config.php';
 
 class Matrix_presets_ext {
 
-	public $name = MATRIX_PRESETS_NAME;
-	public $version = MATRIX_PRESETS_VERSION; 
-	
-	public $description    = 'Adds the ability to save and load matrix values';
-	public $settings_exist = 'n';
-	public $docs_url       = '';
-	public $settings;
+	public $name           = MATRIX_PRESETS_NAME;
+	public $version        = MATRIX_PRESETS_VERSION;
+	public $description    = MATRIX_PRESETS_DESCRIPTION;
+	public $docs_url       = MATRIX_PRESETS_DOCS_URL;
 
-	private $EE;
+	public $settings = array();
+	public $settings_exist = 'n';
+
 
 	/**
 	 * Class Constructor
 	 */
 	public function __construct($settings = array())
 	{
-	
-		$this->EE = get_instance();
-		
-		// --------------------------------------------
-		//  Settings!
-		// --------------------------------------------
-	
 		$this->settings = $settings;
-
 	}
 
 	// --------------------------------------------------------------------
+
 
 	/**
 	 * Activate Extension
 	 */
 	public function activate_extension()
 	{
-		// Setup custom settings in this array.
-		$this->settings = array();
-	
-		// -------------------------------------------
-		//  Add the extension hooks
-		// -------------------------------------------
-
 		$hooks = array(
 			'cp_js_end',
 		);
 
 		foreach($hooks as $hook)
 		{
-			$this->EE->db->insert('extensions', array(
+			ee()->db->insert('extensions', array(
 				'class'    => get_class($this),
 				'method'   => $hook,
 				'hook'     => $hook,
-				'settings' => serialize($this->settings),
+				'settings' => serialize(array()),
 				'priority' => 110,
 				'version'  => $this->version,
 				'enabled'  => 'y'
@@ -82,8 +67,15 @@ class Matrix_presets_ext {
 	 */
 	public function update_extension($current = '')
 	{
-		// Nothing to change...
-		return FALSE;
+		if ($current == '' OR $current == $this->version)
+		{
+			return FALSE;
+		}
+
+		ee()->db->where('class', get_class($this))
+		             ->update('extensions', array('version' => $this->version));
+
+		return TRUE;
 	}
 
 	/**
@@ -91,12 +83,8 @@ class Matrix_presets_ext {
 	 */
 	public function disable_extension()
 	{
-		// -------------------------------------------
-		//  Delete the extension hooks
-		// -------------------------------------------
-
-		$this->EE->db->where('class', get_class($this))
-		             ->delete('exp_extensions');
+		ee()->db->where('class', get_class($this))
+		             ->delete('extensions');
 	}
 
 	// --------------------------------------------------------------------
@@ -104,30 +92,36 @@ class Matrix_presets_ext {
 
 	/**
 	 * cp_js_end ext hook
+	 *
+	 * Runs for every CP page (as a separate JS request), so avoid DB queries here.
+	 * The script only does anything on the publish form.
 	 */
-	function cp_js_end()
+	public function cp_js_end()
 	{
-	
 		$output = '';
-	
-		if ($this->EE->extensions->last_call !== FALSE)
-		{
-			$output = $this->EE->extensions->last_call;
-		}
-	
-		$vars['base'] = '';		
-		
-		if ( version_compare( APP_VER, '3', '>=' ) )
-		{
-			$vars['base'] = ee('CP/URL')->make('cp/addons/settings/matrix_presets', array(), '', '') . '/'; 
-		}
-		
-		$output .= $this->EE->load->view('matrix_presets.js', $vars, TRUE);
-	
-		return $output;
 
+		if (ee()->extensions->last_call !== FALSE)
+		{
+			$output = ee()->extensions->last_call;
+		}
+
+		// EE7+ only
+		if (version_compare(APP_VER, '7', '<'))
+		{
+			return $output;
+		}
+
+		$vars = array('urls' => array());
+
+		foreach (array('get_presets', 'save_preset', 'delete_preset') as $method)
+		{
+			$vars['urls'][$method] = ee('CP/URL')->make('addons/settings/matrix_presets/'.$method)->compile();
+		}
+
+		$output .= ee()->load->view('matrix_presets.js', $vars, TRUE);
+
+		return $output;
 	}
 
 }
 /* End of file ext.matrix_presets.php */
-/* Location: /system/expressionengine/third_party/matrix_presets/ext.matrix_presets.php */

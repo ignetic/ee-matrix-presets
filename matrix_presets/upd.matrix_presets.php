@@ -7,34 +7,21 @@
  * @subpackage	Addons
  * @category	Module
  * @author		Simon Andersohn
- * @link		
+ * @link		https://github.com/ignetic/ee-matrix-presets
  */
- 
+
 require_once PATH_THIRD.'matrix_presets/config.php';
- 
+
 class Matrix_presets_upd {
-	
+
 	public $name = MATRIX_PRESETS_NAME;
-	public $version = MATRIX_PRESETS_VERSION; 
-	
-	private $EE;
+	public $version = MATRIX_PRESETS_VERSION;
+
 	private $class = 'Matrix_presets';
 	private $settings_table = 'matrix_presets_settings';
-	private $site_id = 1;
-	
-	/**
-	 * Constructor
-	 */
-	public function __construct()
-	{
-		$this->EE = get_instance();
-		
-		$this->site_id = $this->EE->config->item('site_id');
-		
-	}
-	
+
 	// ----------------------------------------------------------------
-	
+
 	/**
 	 * Installation Method
 	 *
@@ -42,160 +29,117 @@ class Matrix_presets_upd {
 	 */
 	public function install()
 	{
-		/*
-        // Load dbforge
-        $this->EE->load->dbforge();
-		
-        //----------------------------------------
-        // EXP_MODULES
-        // preferences within module table
-        //----------------------------------------
-        if ($this->EE->db->field_exists('settings', 'modules') == false) {
-            $this->EE->dbforge->add_column('modules', array('settings' => array('type' => 'TEXT') ) );
-        }
-		*/
-		
-		$mod_data = array(
-			'module_name'			=> 'Matrix_presets',
+		ee()->db->insert('modules', array(
+			'module_name'			=> $this->class,
 			'module_version'		=> $this->version,
-			'has_cp_backend'		=> "y",
+			'has_cp_backend'		=> 'y',
 			'has_publish_fields'	=> 'n'
-		);
-		
-		$this->EE->db->insert('modules', $mod_data);
-		
-		
-		// Create settings table
+		));
+
 		$this->add_settings_table();
-		
+
 		return TRUE;
 	}
 
 	// ----------------------------------------------------------------
-	
+
 	/**
 	 * Uninstall
 	 *
 	 * @return 	boolean 	TRUE
-	 */	
+	 */
 	public function uninstall()
 	{
-		$mod_id = $this->EE->db->select('module_id')
+		$mod_id = ee()->db->select('module_id')
 								->get_where('modules', array(
 									'module_name'	=> $this->class
 								))->row('module_id');
-		
-		if ($this->EE->db->table_exists('module_member_groups'))
-		{
-			$this->EE->db->where('module_id', $mod_id)->delete('module_member_groups');
-		}	
-		if ($this->EE->db->table_exists('module_member_roles')) 
-		{
-			$this->EE->db->where('module_id', $mod_id)->delete('module_member_roles');
-		}
-		
-		$this->EE->db->where('module_name', $this->class)
+
+		ee()->db->where('module_id', $mod_id)->delete('module_member_roles');
+
+		ee()->db->where('module_name', $this->class)
 					->delete('modules');
-					 
-		$this->EE->db->where('class', $this->class)
+
+		ee()->db->where('class', $this->class)
 					->delete('actions');
-		
-		$this->EE->load->dbforge();
-		$this->EE->dbforge->drop_table($this->settings_table);
-		
+
+		ee()->load->dbforge();
+		ee()->dbforge->drop_table($this->settings_table);
+
 		return TRUE;
 	}
-	
+
 	// ----------------------------------------------------------------
-	
+
 	/**
 	 * Module Updater
 	 *
+	 * Note: 2.0 removed the pre-1.2 migration (presets stored in exp_modules.settings).
+	 * Update to 1.3.8 first to keep presets from 1.1 or earlier.
+	 *
 	 * @return 	boolean 	TRUE
-	 */	
+	 */
 	public function update($current = '')
 	{
-		if ($current == $this->version)
+		if (version_compare($current, $this->version, '>='))
 		{
 			return FALSE;
-		}	
+		}
 
-		if (version_compare($current, '1.2', '<'))
+		// Only creates the table if missing
+		$this->add_settings_table();
+
+		if (version_compare($current, '2.0.0', '<'))
 		{
-			// Create new table
-			$this->add_settings_table();
-
-			// Move old settings to new table
-			$presets = array();
-			
-			if ($this->EE->db->field_exists('settings', 'modules'))
-			{
-			
-				// Get settings from old table
-				$query = $this->EE->db->select('settings')->where('module_name', $this->class)->get('modules');
-				foreach ($query->result_array() as $row)
-				{
-					if ($row['settings'])
-					{
-						// Arrays only, never objects (the allowed_classes option needs PHP 7)
-						$presets = (PHP_VERSION_ID >= 70000)
-							? @unserialize($row['settings'], array('allowed_classes' => false))
-							: @unserialize($row['settings']);
-					}
-				}
-
-				if ( ! is_array($presets))
-				{
-					$presets = array();
-				}
-
-				if (!empty($presets))
-				{
-					// add to new table
-					foreach($presets as $field_id => $val)
-					{
-						$fields = array();
-						$fields['site_id'] = $this->site_id;
-						$fields['field_id'] = $field_id;
-						$fields['serialized'] = 1;
-						
-						foreach($val as $preset_id => $preset_values)
-						{
-							// Let's start the preset ids from 1
-							$fields['preset_id'] = $preset_id+1;
-						
-							$this->EE->db->from($this->settings_table);
-							$this->EE->db->where($fields);
-							if ($this->EE->db->count_all_results() == 0) 
-							{
-								$fields['preset_values'] = serialize($preset_values);
-								$query = $this->EE->db->insert($this->settings_table, $fields);
-							}
-							else
-							{
-								$query = $this->EE->db->update($this->settings_table, array('preset_values' => serialize($preset_values)), $fields);
-							}
-							
-						}
-					}
-				
-					// Remove settings from old table
-					$this->EE->db->update('modules', array('settings' => NULL), array('module_name' => $this->class));
-					
-				}
-			
-			}
-			
-			
+			$this->convert_to_json();
 		}
 
 		return TRUE;
 	}
-	
-	
+
+
+	/**
+	 * 2.0: larger preset column and JSON instead of PHP serialized data
+	 */
+	private function convert_to_json()
+	{
+		ee()->load->dbforge();
+
+		ee()->dbforge->modify_column($this->settings_table, array(
+			'preset_values' => array(
+				'name' => 'preset_values',
+				'type' => 'mediumtext',
+				'null' => TRUE,
+			),
+		));
+
+		$query = ee()->db->select('id, preset_values')
+			->where('serialized', 1)
+			->get($this->settings_table);
+
+		foreach ($query->result_array() as $row)
+		{
+			$preset = @unserialize((string) $row['preset_values'], array('allowed_classes' => false));
+
+			// Leave anything unreadable as it is
+			if ( ! is_array($preset))
+			{
+				continue;
+			}
+
+			$json = json_encode($preset, JSON_INVALID_UTF8_SUBSTITUTE);
+
+			if ($json !== FALSE)
+			{
+				ee()->db->update($this->settings_table, array('preset_values' => $json, 'serialized' => 0), array('id' => $row['id']));
+			}
+		}
+	}
+
+
 	private function add_settings_table()
 	{
-		$this->EE->load->dbforge();
+		ee()->load->dbforge();
 
 		$fields = array(
 			'id'	=> array(
@@ -219,21 +163,21 @@ class Matrix_presets_upd {
 				'constraint' => 255,
 			),
 			'preset_values' => array(
-				'type' => 'text'
+				'type' => 'mediumtext'
 			),
+			// 1 = PHP serialized (pre 2.0), 0 = JSON
 			'serialized' => array(
 				'type' => 'int',
 				'constraint' => 1,
 				'null' => TRUE,
 			),
 		);
-		
 
-		$this->EE->dbforge->add_field($fields);
-		$this->EE->dbforge->add_key('id', TRUE);
-		$this->EE->dbforge->create_table($this->settings_table, TRUE);		
+
+		ee()->dbforge->add_field($fields);
+		ee()->dbforge->add_key('id', TRUE);
+		ee()->dbforge->create_table($this->settings_table, TRUE);
 	}
-	
+
 }
 /* End of file upd.matrix_presets.php */
-/* Location: /system/expressionengine/third_party/matrix_presets/upd.matrix_presets.php */
